@@ -1,6 +1,8 @@
 # Jellyfin-Migrator
 
-Script to migrate an entire Jellyfin database.
+Script to migrate an entire Jellyfin database. 
+
+**Update 2022-05-03: Unfortunately it doesn't work (yet). Jellyfin doesn't throw any errors but during the regular library scan it "recognizes" that the entire library has been swapped (because all the paths changed). So it tosses everything out of the window and rescans. Fixing this will take serious amounts of work. Though at least the watch stats and the other settings are indeed properly migrated.**
 
 ## Index
 
