@@ -25,6 +25,7 @@ ids = dict()
 
 
 # Functions used for converting IDs between the various formats. See load_ids
+# convert_ancestor_id: regroup bytes to convert from/to ancestor id format (symetric)
 def convert_ancestor_id(id: str):
     # Group by bytes
     id = [id[i : i+2] for i in range(0, len(id), 2)]
@@ -36,34 +37,47 @@ def convert_ancestor_id(id: str):
     swapped_id = [id[i] for i in byte_order]
     swapped_id.extend(id[8:])
     return "".join(swapped_id)
+# bid2sid: binary id to string id
 def bid2sid(id): return binascii.b2a_hex(id).decode("ascii")
+# sid2bid: string id to binary id
 def sid2bid(id): return binascii.a2b_hex(id)
+# sid2did: string id to dashed string id
 def sid2did(id): return "-".join([id[:8], id[8:12], id[12:16], id[16:20], id[20:]])
-def sid2pid(id): return f"{id[:2]}/{id}"
 
 
 # Loads all IDs from jellyfins library.db file.
 # Additionally, it generates all the variants of each ID that may be used.
-# More details on the formats can be found in comments in jellyfin_migrator.py
+# GUIDs of the following formats have been found / are assumed to exist:
+#   * binary:                       b'\x83:\xdd\xde\x99(\x93\xe9=\x05r\x90\x7f\x8bL\xad'
+#   * string:                        '833addde992893e93d0572907f8b4cad'
+#   * string with dashes:            '833addde-9928-93e9-3d05-72907f8b4cad'
+#   * All of these formats exist in another variant, called "ancestor" (because they're
+#     primarily used to identify ancestors of objects). The ancestor versions have the
+#     bytes rearranged in a different order for God knows what reason (see convert_ancestor_id)
+#     * ancestor binary:            b'\xde\xdd:\x83(\x99\xe9\x93=\x05r\x90\x7f\x8bL\xad'
+#     * ancestor string:             'dedd3a832899e9933d0572907f8b4cad'
+#     * ancestor string with dashes: 'dedd3a83-2899-e993-3d05-72907f8b4cad'
+#   * in paths they're grouped in folders by the first two letters:
+#     '.../83/833addde992893e93d0572907f8b4cad/...'
 def load_ids(library_db:str):
     con = sqlite3.connect(library_db)
     cur = con.cursor()
     id_replacements_bin = [x[0] for x in cur.execute("SELECT `guid` FROM `TypedBaseItems`")]
     con.close()
 
-    id_replacements_str               = [bid2sid(k) for k in id_replacements_bin]
-    id_replacements_str_dash          = [sid2did(k) for k in id_replacements_str]
-    id_replacements_str_ancestor      = [convert_ancestor_id(k) for k in id_replacements_str]
-    id_replacements_bin_ancestor      = [sid2bid(k) for k in id_replacements_str_ancestor]
-    id_replacements_str_ancestor_dash = [sid2did(k) for k in id_replacements_str_ancestor]
+    id_str               = [bid2sid(k) for k in id_replacements_bin]
+    id_str_dash          = [sid2did(k) for k in id_str]
+    id_ancestor_str      = [convert_ancestor_id(k) for k in id_str]
+    id_ancestor_bin      = [sid2bid(k) for k in id_ancestor_str]
+    id_ancestor_str_dash = [sid2did(k) for k in id_ancestor_str]
 
     ids = {
         "bin": id_replacements_bin,
-        "str": id_replacements_str,
-        "str-dash": id_replacements_str_dash,
-        "ancestor-bin": id_replacements_bin_ancestor,
-        "ancestor-str": id_replacements_str_ancestor,
-        "ancestor-str-dash": id_replacements_str_ancestor_dash,
+        "str": id_str,
+        "str-dash": id_str_dash,
+        "ancestor-bin": id_ancestor_bin,
+        "ancestor-str": id_ancestor_str,
+        "ancestor-str-dash": id_ancestor_str_dash,
     }
 
     print(f"{len(id_replacements_bin)} IDs loaded from library.db")
