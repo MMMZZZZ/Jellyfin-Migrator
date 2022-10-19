@@ -22,7 +22,7 @@ import hashlib
 import binascii
 import xml.etree.ElementTree as ET
 from pathlib import Path
-from shutil import copy
+from shutil import copy, move
 from time import time
 from jellyfin_id_scanner import *
 
@@ -41,14 +41,15 @@ from jellyfin_id_scanner import *
 # the (back)slashes as specified. This can only be done on "known" paths
 # because (back)slashes occur in other strings, too, where they must not be
 # changed.
-db_path_replacements = {
+path_replacements = {
     # Self explanatory, I guess.
     "target_path_slash": "/",
     # Paths to your libraries
     "D:/Jellyfin-Test/Shows": "/data/tvshows",
-    ##"D:/Serien": "/data/tvshows",
-    ##"F:/Filme": "/data/movies",
-    ##"F:/Musik": "/data/music",
+    "D:/Serien": "/data/tvshows",
+    "F:/Serien": "/data/tvshows",
+    "F:/Filme": "/data/movies",
+    "F:/Musik": "/data/music",
     # Paths to the different parts of the jellyfin database. Determine these
     # by comparing your existing installation with the paths in your new
     # installation.
@@ -85,11 +86,11 @@ fs_path_replacements = {
 # This is required if you copied your jellyfin DB to another location and then
 # start processing it with this script.
 original_root = Path("C:/ProgramData/Jellyfin/Server")
-source_root = Path("C:/Users/Max/Desktop/Jellyfin")
-target_root = Path("C:/Users/Max/Desktop/Jellyfin-patched")
-target_new_id_root = Path("C:/Users/Max/Desktop/Jellyfin-patched-ids")
+source_root = Path("D:/Jellyfin/Server")
+target_root = Path("D:/Jellyfin-patched/Server")
 
 
+### The To-Do Lists: todo_list_paths, todo_list_id_paths and todo_list_ids.
 # If your installation is like mine, you don't need to change the following three todo_lists.
 # They contain which files should be modified and how.
 # The migration is a multistep process:
@@ -101,6 +102,13 @@ target_new_id_root = Path("C:/Users/Max/Desktop/Jellyfin-patched-ids")
 # todo_list_paths is used for step 1 and 2
 # todo_list_id_paths is used for step 3.1
 # todo_list_ids is used for step 3.2
+#
+# General Notes:
+#   * For step 1, "path_replacements" is used to determine the new file paths.
+#   * In step 2, the "replacements" from the todo_list is used, but it makes no sense to set it
+#     to something different from what you used in step 1.
+#   * In step 3 the "replacements" entry in the todo_lists is auto-generated, no need to touch it either.
+#
 # Notes from my own jellyfin installation:
 #   3.1 seems to be "ancestor-str" formatted IDs only (see jellyfin_id_scanner for details on the format)
 #   3.2 thus only leaves the sqlite .db files.
@@ -110,7 +118,7 @@ todo_list_paths = [
     {
         "source": source_root / "data/library.db",
         "target": "auto",                      # Usually you want to leave this on auto. If you want to work on the source file, set it to the same path (YOU SHOULDN'T!).
-        "replacements": db_path_replacements,  # Usually same for all but you could specify a specific one per db.
+        "replacements": path_replacements,     # Usually same for all but you could specify a specific one per db.
         "tables": {
             "TypedBaseItems": {        # Name of the table within the SQLite database file
                 "path_columns": [      # All column names that can contain paths.
@@ -138,7 +146,7 @@ todo_list_paths = [
     {
         "source": source_root / "data/jellyfin.db",
         "target": "auto",
-        "replacements": db_path_replacements,
+        "replacements": path_replacements,
         "tables": {
             "ImageInfos": {
                 "path_columns": [
@@ -151,7 +159,7 @@ todo_list_paths = [
     {
         "source": source_root / "data/*.db",
         "target": "auto",
-        "replacements": db_path_replacements,
+        "replacements": path_replacements,
         "copy_only": True,
         "no_log": True,
     },
@@ -159,38 +167,38 @@ todo_list_paths = [
     {
         "source": source_root / "plugins/**/*.json",
         "target": "auto",
-        "replacements": db_path_replacements,
+        "replacements": path_replacements,
     },
 
     {
         "source": source_root / "config/*.xml",
         "target": "auto",
-        "replacements": db_path_replacements,
+        "replacements": path_replacements,
     },
 
     {
         "source": source_root / "metadata/**/*.nfo",
         "target": "auto",
-        "replacements": db_path_replacements,
+        "replacements": path_replacements,
     },
 
     {
         # .xml, .mblink, .collection files are here.
         "source": source_root / "root/**/*.*",
         "target": "auto",
-        "replacements": db_path_replacements,
+        "replacements": path_replacements,
     },
 
     {
         "source": source_root / "data/collections/**/collection.xml",
         "target": "auto",
-        "replacements": db_path_replacements,
+        "replacements": path_replacements,
     },
 
     {
         "source": source_root / "data/playlists/**/playlist.xml",
         "target": "auto",
-        "replacements": db_path_replacements,
+        "replacements": path_replacements,
     },
 
     # Lastly, copy anything that's left. Any file that's already been processed/copied is skipped
@@ -198,7 +206,7 @@ todo_list_paths = [
     {
         "source": source_root / "**/*.*",
         "target": "auto",
-        "replacements": db_path_replacements,
+        "replacements": path_replacements,
         "copy_only": True,
         "no_log": True,
     },
@@ -212,7 +220,7 @@ todo_list_id_paths = [
     {
         "source": source_root / "data/library.db",
         "target": "auto-existing",             # If you used "auto" in todo_list_paths, leave this on "auto-existing". Otherwise specify same path.
-        "replacements": db_path_replacements,  # Use the same here as in todo_list_paths
+        "replacements": {"oldids": "newids"},  # Will be auto-generated during the migration.
         "tables": {
             "TypedBaseItems": {        # Name of the table within the SQLite database file
                 "path_columns": [      # All column names that can contain paths.
@@ -241,26 +249,26 @@ todo_list_id_paths = [
     {
         "source": source_root / "config/*.xml",
         "target": "auto-existing",             # If you used "auto" in todo_list_paths, leave this on "auto-existing". Otherwise specify same path.
-        "replacements": db_path_replacements,  # Use the same here as in todo_list_paths
+        "replacements": {"oldids": "newids"},  # Will be auto-generated during the migration.
     },
 
     {
         "source": source_root / "metadata/**/*",
         "target": "auto-existing",             # If you used "auto" in todo_list_paths, leave this on "auto-existing". Otherwise specify same path.
-        "replacements": db_path_replacements,  # Use the same here as in todo_list_paths
+        "replacements": {"oldids": "newids"},  # Will be auto-generated during the migration.
     },
 
     {
         # .xml, .mblink, .collection files are here.
         "source": source_root / "root/**/*",
         "target": "auto-existing",             # If you used "auto" in todo_list_paths, leave this on "auto-existing". Otherwise specify same path.
-        "replacements": db_path_replacements,  # Use the same here as in todo_list_paths
+        "replacements": {"oldids": "newids"},  # Will be auto-generated during the migration.
     },
 
     {
         "source": source_root / "data/**/*",
         "target": "auto-existing",             # If you used "auto" in todo_list_paths, leave this on "auto-existing". Otherwise specify same path.
-        "replacements": db_path_replacements,  # Use the same here as in todo_list_paths
+        "replacements": {"oldids": "newids"},  # Will be auto-generated during the migration.
     },
 ]
 
@@ -271,7 +279,7 @@ todo_list_ids = [
     {
         "source": source_root / "data/library.db",
         "target": "auto-existing",             # If you used "auto" in todo_list_paths, leave this on "auto-existing". Otherwise specify same path.
-        "replacements": db_path_replacements,  # Use the same here as in todo_list_paths
+        "replacements": {"oldids": "newids"},  # Will be auto-generated during the migration.
         "tables": {
             "AncestorIds": {
                 "str": [],
@@ -364,18 +372,18 @@ todo_list_ids = [
     {
         "source": source_root / "data/playback_reporting.db",
         "target": "auto-existing",             # If you used "auto" in todo_list_paths, leave this on "auto-existing". Otherwise specify same path.
-        "replacements": db_path_replacements,  # Use the same here as in todo_list_paths
+        "replacements": {"oldids": "newids"},  # Will be auto-generated during the migration.
         "tables": {
-        "PlaybackActivity": {
-            "str": [
-                "ItemId",
-            ],
-            "str-dash": [],
-            "ancestor-str": [],
-            "ancestor-str-dash": [],
-            "bin": [],
+            "PlaybackActivity": {
+                "str": [
+                    "ItemId",
+                ],
+                "str-dash": [],
+                "ancestor-str": [],
+                "ancestor-str-dash": [],
+                "bin": [],
+            },
         },
-    },
     },
 ]
 
@@ -473,41 +481,51 @@ def recursive_id_path_replacer(d, to_replace: dict):
             ignored += 1
         else:
             found = False
-            for src, dst in to_replace.items():
-                if src in p.name:
-                    p = p.with_name(p.name.replace(src, dst))
-                elif src in p.parts:
+
+            src, dst = "", ""
+
+            if set(p.stem).issubset(set("0123456789abcdef-")):
+                dst = to_replace.get(p.stem, "")
+                if dst:
+                    found = True
+                    p = p.with_stem(dst)
+
+            if not found:
+                for part in p.parts[:-1]:
+                    # Check if it can actually be an ID. If so, look it up (which is expensive).
+                    if set(part).issubset(set("0123456789abcdef-")):
+                        src = part
+                        dst = to_replace.get(part, "")
+                        if dst:
+                            break
+                if dst:
+                    found = True
+                    q = Path()
                     # Find folder as path object that needs to be changed
                     q = p
-                    while q.name != src:
-                        q = q.parent
-                    # p becomes the part relative to the now determined q part
-                    p = p.relative_to(q)
-                    q = q.with_name(dst)
-                else:
-                    # no need for following check of parent folder etc.
-                    continue
+                    while p.name != src:
+                        p = p.parent
+                    # q becomes the part relative to the now determined p part (with p.stem = id)
+                    q = q.relative_to(p)
+                    p = p.with_name(dst)
 
-                # Check if the parent folder starts with byte(s) from the id
-                if src.startswith(q.parent.name):
-                    # If so, move the already replaced part from q to p
-                    p = q.name / p
-                    q = q.parent
-                    # Replace required number of bytes
-                    q = q.with_name(dst[:len(q.name)])
+                    # Check if the parent folder starts with byte(s) from the id
+                    if src.startswith(p.parent.name):
+                        # If so, move the already replaced part from p to q
+                        q = p.name / q
+                        p = p.parent
+                        # Replace required number of bytes
+                        p = p.with_name(dst[:len(p.name)])
 
-                # Merge q and p back together
-                p = q / p
-
+                    # Merge q and p back together
+                    p = p / q
+            if found:
+                modified += 1
                 # I guess 99% of the users won't migrate _to_ windows but the script could generate
                 # \ paths anyways.
                 # p.as_posix() makes sure that we always get a string with "/". Otherwise, on windows,
                 # str(p) would automatically return "\" paths.
                 d = p.as_posix().replace("/", to_replace["target_path_slash"])
-                found = True
-                break
-            if found:
-                modified += 1
             else:
                 ignored += 1
                 # Unlike recursive_root_path_replacer, there is no need to warn the user about
@@ -645,6 +663,10 @@ def update_db_table(
         # to mess with it myself.
         # Note that this relies on result.keys() and result.values() returning the entries in the
         # same order (which is guaranteed).
+        # Note: it can happen that no changes are made at all. In this case we can abort here and
+        #       go for the next job from the todo list.
+        if not result:
+            continue
         keys = ", ".join([f"`{k}` = ?" for k in result.keys()])
         query = f"UPDATE `{table}` SET {keys} WHERE `rowid` = ?"
 
@@ -689,6 +711,11 @@ def update_xml(file: Path, replace_dict: dict, replace_func) -> None:
     tree = ET.parse(file)
     root = tree.getroot()
     for el in root.iter():
+        # Exclude a few tags known to contain no paths.
+        # biography, outline: These often contain lots of text (= slow to process) and generate
+        # false-positives for the missed path detection (see recursive_root_path_replacer)
+        if el.tag in ("biography", "outline"):
+            continue
         el.text, mo, ig = replace_func(el.text, replace_dict)
         modified += mo
         ignored  += ig
@@ -708,59 +735,62 @@ def get_target(
 ) -> Path:
     # Not the cleanest solution for remembering it between function calls but good enough here.
     global user_wants_inplace_warning
-    global all_path_changes
+#    global all_path_changes
 
-    if source in all_path_changes:
-        target = all_path_changes[source]
-    else:
-            # "auto" means the target path is generated by the same path replacement dictionary that's
-        # also used to update all the path strings.
-        # In this case we don't care about the stats returned by recursive_path_replacer, hence
-        # the variable names.
-        if target == "auto":
-            original_source = original_root / source.relative_to(source_root)
-            target, idgaf1, idgaf2 = recursive_root_path_replacer(original_source, to_replace=replacements)
-            target, idgaf1, idgaf2 = recursive_root_path_replacer(target, to_replace=fs_path_replacements)
-            target = Path(target)
-            if not target.is_absolute():
-                if target.is_relative_to("/"):
-                    # Otherwise the line below will make target relative to the _root_ of target_root
-                    # instead of relative to target_root.
-                    target = target.relative_to("/")
-                target = target_root / target
+    source = Path(source)
+    target = Path(target)
 
-        # If source and target are the same there are two possibilities:
-        #     1. The user actually wants to work on the given source files; maybe he already created
-        #        a copy and directly pointed this script towards that copy.
-        #     2. The user forgot that they shouldn't touch the original files.
-        #     3. Something's wrong with the path replacement dict.
-        # In any cases, the user is notified and can decide whether he wants to continue this time,
-        # all the remaining times, too, or abort.
-        #
-        # Program: Are you sure? User: I don't know [yet]
-        usure = "idk"
-        if source == target:
-            if user_wants_inplace_warning:
-                while usure not in "yna":
-                    usure = input("Warning! Working on original file! Continue? [Y]es, [N]o, [A]lways ")
-                    # j is for the german "ja" which means yes.
-                    usure = usure[0].lower().replace("j", "y")
-                if usure == "n":
-                    print("Skipping this file. If you want to abort the whole process, stop the script"
-                          "with CTRL + C.")
-                    target = None
-                elif usure == "a":
-                    # Don't warn about this anymore.
-                    user_wants_inplace_warning = False
-        else:
-            if not target.parent.exists():
-                target.parent.mkdir(parents=True)
-            if not no_log:
-                print("Copying...", target, end=" ")
-            copy(source, target)
-            if not no_log:
-                print("Done.")
-        all_path_changes[source] = target
+    skip_copy = False
+
+    # "auto" means the target path is generated by the same path replacement dictionary that's
+    # also used to update all the path strings.
+    # In this case we don't care about the stats returned by recursive_path_replacer, hence
+    # the variable names.
+    if len(target.parts) == 1 and target.name.startswith("auto"):
+        if target.name == "auto-existing":
+            skip_copy = True
+        original_source = original_root / source.relative_to(source_root)
+        target, idgaf1, idgaf2 = recursive_root_path_replacer(original_source, to_replace=replacements)
+        target, idgaf1, idgaf2 = recursive_root_path_replacer(target, to_replace=fs_path_replacements)
+        target = Path(target)
+        if not target.is_absolute():
+            if target.is_relative_to("/"):
+                # Otherwise the line below will make target relative to the _root_ of target_root
+                # instead of relative to target_root.
+                target = target.relative_to("/")
+            target = target_root / target
+
+    # If source and target are the same there are two possibilities:
+    #     1. The user actually wants to work on the given source files; maybe he already created
+    #        a copy and directly pointed this script towards that copy.
+    #     2. The user forgot that they shouldn't touch the original files.
+    #     3. Something's wrong with the path replacement dict.
+    # In any cases, the user is notified and can decide whether he wants to continue this time,
+    # all the remaining times, too, or abort.
+    #
+    # Program: Are you sure? User: I don't know [yet]
+    usure = "idk"
+    if source == target:
+        if user_wants_inplace_warning:
+            while usure not in "yna":
+                usure = input("Warning! Working on original file! Continue? [Y]es, [N]o, [A]lways ")
+                # j is for the german "ja" which means yes.
+                usure = usure[0].lower().replace("j", "y")
+            if usure == "n":
+                print("Skipping this file. If you want to abort the whole process, stop the script"
+                      "with CTRL + C.")
+                target = None
+            elif usure == "a":
+                # Don't warn about this anymore.
+                user_wants_inplace_warning = False
+    elif not skip_copy:
+        if not target.parent.exists():
+            target.parent.mkdir(parents=True)
+        if not no_log:
+            print("Copying...", target, end=" ")
+        copy(source, target)
+        if not no_log:
+            print("Done.")
     return target
 
 
@@ -777,17 +807,15 @@ def process_file(
         tables = dict()
 
     # What do you want me to do with no input?
-    if not source:
+    if not target:
         return
 
     # Files only.
-    if source.is_dir():
+    if target.is_dir():
         return
 
     if not no_log:
-        print("Processing", source)
-
-    target = get_target(source=source, target=target, replacements=replacements, no_log=no_log)
+        print("Processing", target)
 
     if copy_only:
         # No need to do any further checks.
@@ -805,7 +833,7 @@ def process_file(
             # See update_db_table and/or the todo_list.
             update_db_table(file=target, replace_dict=replacements, replace_func=replace_func, table=table, **kwargs)
     elif target.suffix == ".xml" or target.suffix == ".nfo":
-        update_xml(file=target, replace_dict=replacements)
+        update_xml(file=target, replace_dict=replacements, replace_func=replace_func)
     elif target.suffix == ".mblink":
         # .mblink files only contain a path, nothing else.
         with open(target, "r") as f:
@@ -826,6 +854,18 @@ def process_file(
             # indent 2 seems to be the default formatting for jellyfin json files.
             json.dump(j, f, indent=2)
 
+    # If we're updating path ids we also need to check the paths of the files themselves
+    # and move them if they're relative to a path.
+    # This obviously leaves empty folders behind, which are cleaned up afterwards.
+    if replace_func == recursive_id_path_replacer:
+        source = target
+        target, modified, ignored = recursive_id_path_replacer(source, replacements)
+        if modified:
+            print("Changing ID in filepath: ->", target)
+            target = Path(target)
+            target.parent.mkdir(parents=True, exist_ok=True)
+            source.replace(target)
+
 
 # Processes the todo_list.
 # It handles potential wildcards in the file paths and keeps track
@@ -839,9 +879,11 @@ def process_file(
 # lst: job list
 # process_func: function to apply to jobs of lst.
 # replace_func: function used by process_func to do the replacing of paths, ...
-def process_files(lst: list, process_func, replace_func):
+def process_files(lst: list, process_func, replace_func, path_replacements):
     done = set()
     for job in lst:
+        if "no_log" not in job:
+            job["no_log"] = False
         source = job["source"]
         print(f"Current job from todo_list: {source}")
         if "*" in str(source):
@@ -851,21 +893,48 @@ def process_files(lst: list, process_func, replace_func):
             # to convert them to a string...
             # It is expected that all these paths are relative to source_root.
             source = source.relative_to(source_root)
-            for s in source_root.glob(str(source)):
-                if s in done:
+            for src in source_root.glob(str(source)):
+                if src.is_dir():
+                    continue
+                if src in done:
                     # File has already been processed by this script.
                     continue
-                done.add(s)
+                done.add(src)
+
+                target = get_target(
+                    source=src,
+                    target=job["target"],
+                    replacements=path_replacements,
+                    no_log=job["no_log"],
+                )
+
                 # pass the job as is but with non-wildcard source path.
-                args = {k: (s if k == "source" else v) for k, v in job.items()}
-                process_func(replace_func=replace_func, **args)
+                process_func(
+                    replace_func=replace_func,
+                    source=src,
+                    target=target,
+                    **{k: v for k, v in job.items() if k not in ("source", "target")},
+                )
         else:
             # No wildcards, process the path directly - if it hasn't already
             # been processed.
             if source in done:
                 continue
             done.add(source)
-            process_func(replace_func=replace_func, **job)
+
+            target = get_target(
+                source=source,
+                target=job["target"],
+                replacements=path_replacements,
+                no_log=job["no_log"],
+            )
+
+            process_func(
+                replace_func=replace_func,
+                source=source,
+                target=target,
+                **{k: v for k, v in job.items() if k not in ("source", "target")},
+            )
         print("")
 
 
@@ -880,6 +949,7 @@ def get_dotnet_MD5(s: str):
 # Note: kwargs is due to how process_files works. It passes a lot of stuff from the
 # job list that's not needed here.
 def update_db_table_ids(
+        source,
         target,
         tables,
         preview=False,
@@ -947,9 +1017,9 @@ def get_ids():
     # Check for collisions between old and new ids in both the normal and ancestor format.
     # If there are any, the resulting DB / Files probably won't work properly!!
     collision = set(id_replacements_str.keys())
-    collision.add(id_replacements_str.values())
-    collision.add(id_replacements_ancestor_str.keys())
-    collision.add(id_replacements_ancestor_str.values())
+    collision.update(id_replacements_str.values())
+    collision.update(id_replacements_ancestor_str.keys())
+    collision.update(id_replacements_ancestor_str.values())
     collisions = 4 * len(id_replacements_str.keys()) - len(collision)
     if collisions > 0:
         print(f"Warning! {collisions} collision(s) between old and new ID strings detected. The resulting database "
@@ -999,16 +1069,35 @@ def update_ids_old_stuff(id_replacements_str_all:dict):
     ...
 
 
+def delete_empty_folders(dir:str):
+    dir = Path(dir)
+
+    done = False
+    while not done:
+        done = True
+        for p in dir.glob("**"):
+            if not list(p.iterdir()):
+                print("Removing empty folder", p)
+                p.rmdir()
+                done = False
+
+
 if __name__ == "__main__":
     ### Copy relevant files and adjust all paths to the new locations.
-    process_files(todo_list_paths, process_func=process_file, replace_func=recursive_root_path_replacer)
+    process_files(
+        todo_list_paths,
+        process_func=process_file,
+        replace_func=recursive_root_path_replacer,
+        path_replacements=path_replacements,
+    )
 
     ### Update IDs
     # Generate IDs based on those new paths and save them in the global variable
     get_ids()
     # ID types occurring in paths (<- search for that to find another comment with more details if you missed it)
     # Include/Exclude types (see get_ids) to specify which are used for looking through paths.
-    id_replacements_path = {**ids["str"], **ids["ancestor-str"]}
+    id_replacements_path = {**ids["ancestor-str"], **ids["ancestor-str-dash"], **ids["str"], **ids["str-dash"],
+                            "target_path_slash": path_replacements["target_path_slash"]}
 
     # To (mostly) reuse the same functions from step 1, the replacements dict needs to be updated with
     # id_replacements_path. It can't be replaced since it's also used to find the files (which uses the
@@ -1017,11 +1106,22 @@ if __name__ == "__main__":
     # since step 1 only processes the roots of the paths (which cannot be similar to anything in
     # id_replacements_path).
     for i, job in enumerate(todo_list_id_paths):
-        job["replacements"].update(id_replacements_path)
-        todo_list_id_paths[i] = job
+        todo_list_id_paths[i]["replacements"] = id_replacements_path
 
     # Replace all paths with ids - both in the file system as well as within files.
-    process_files(todo_list_id_paths, process_func=process_file, replace_func=recursive_id_path_replacer)
+    process_files(
+        todo_list_id_paths,
+        process_func=process_file,
+        replace_func=recursive_id_path_replacer,
+        path_replacements={**path_replacements, **id_replacements_path},
+    )
+    # Clean up empty folders that may be left behind in the target directory
+    #delete_empty_folders(target_root)
 
     # Replace remaining ids.
-    process_files(todo_list_ids, process_func=update_db_table_ids, replace_func=None)
+    process_files(
+        todo_list_ids,
+        process_func=update_db_table_ids,
+        replace_func=None,
+        path_replacements = path_replacements,
+    )
