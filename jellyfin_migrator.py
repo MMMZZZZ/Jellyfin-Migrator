@@ -22,9 +22,12 @@ import hashlib
 import binascii
 import xml.etree.ElementTree as ET
 from pathlib import Path
-from shutil import copy, move
+from shutil import copy
 from time import time
 from jellyfin_id_scanner import *
+import datetime
+from string import ascii_letters
+import os
 
 
 # These paths will be processed in the order they're listed here.
@@ -74,7 +77,12 @@ path_replacements = {
 # In these cases remove all entries except for "target_path_slash".
 fs_path_replacements = {
     "target_path_slash": "/",
-    "/config": "/"
+    "/config": "/",
+    "/data/tvshows": "Y:/Serien",
+    "/data/movies": "Y:/Filme",
+    "/data/music": "Y:/Musik",
+    "%AppDataPath%": "/data/data",
+    "%MetadataPath%": "/data/metadata",
 }
 
 
@@ -85,6 +93,15 @@ fs_path_replacements = {
 # and then do the replacement according to the path_replacements dict.
 # This is required if you copied your jellyfin DB to another location and then
 # start processing it with this script.
+#
+# TODO media_root: If your migration process is like mine it looks like this:
+# You copy your Jellyfin database to some directory, maybe on your old Jellyfin
+# server, maybe on some other computer. Separate from that, you copy / move your
+# media files to their new location. Then you run this script to adjust the
+# Jellyfin databases accordingly. This process however needs access to the
+# library files _at their final location_ because it needs to get the file
+# creation and modification dates as jellyfin will see them after the migration.
+# .
 original_root = Path("C:/ProgramData/Jellyfin/Server")
 source_root = Path("D:/Jellyfin/Server")
 target_root = Path("D:/Jellyfin-patched/Server")
@@ -450,7 +467,7 @@ def recursive_root_path_replacer(d, to_replace: dict):
                 if len(p.parents) > 1 \
                         and not d.startswith("https:") \
                         and not d.startswith("http:"):
-                    print(f"No entry to change this (presumed) path: {d}")
+                    print(f"No entry for this (presumed) path: {d}")
     return d, modified, ignored
 
 
@@ -957,19 +974,44 @@ def update_db_table_ids(
 ):
     global ids
 
+    print("Updating Item IDs in database... ")
+
     # Initialize sqlite3 objects
     con = sqlite3.connect(target)
     cur = con.cursor()
 
+    updated_ids_count = 0
     # That's a very nested loop and could probably be written more efficiently using
     # multiprocessing and more advanced sqlite queries.
     for table, columns_by_id_type in tables.items():
         for id_type, columns in columns_by_id_type.items():
             for column in columns:
-                for old_id, in cur.execute(f"SELECT DISTINCT `{column}` from `{table}`"):
+                print(f"Updating {column} IDs in table {table}...")
+                # See comment about iterating over rows while modifying them in update_db_table.
+                rows = [r for r in cur.execute(f"SELECT DISTINCT `{column}` from `{table}`")]
+                progress = 0
+                rowcount = len(rows)
+                t = time()
+                for old_id, in rows:
+                    progress += 1
+                    # Print the progress every second. Note: this is the only usage of the "progress" variable.
+                    now = time()
+                    if now - t > 1:
+                        print(f"Progress: {progress} / {rowcount} rows")
+                        t = now
                     if old_id in ids[id_type]:
                         new_id = ids[id_type][old_id]
-                        cur.execute(f"UPDATE `{table}` SET `{column}` = ? WHERE `{column}` = ?", (new_id, old_id))
+                        try:
+                            cur.execute(f"UPDATE `{table}` SET `{column}` = ? WHERE `{column}` = ?", (new_id, old_id))
+                        except sqlite3.IntegrityError:
+                            col_names  = [x[0] for x in cur.execute(f"SELECT name FROM PRAGMA_TABLE_INFO('{table}')")]
+                            rows = [x for x in cur.execute(f"SELECT * FROM `{table}` WHERE `{column}` = ?", (old_id,))]
+                            rows = [dict(zip(col_names, row)) for row in rows]
+                            print(f"Encountered {len(rows)} duplicated entries")
+                            for i, row in enumerate(rows):
+                                print(f"Deleting ({i+1}/{len(rows)}): ", row)
+                            cur.execute(f"DELETE FROM `{table}` WHERE `{column}` = ?", (old_id,))
+                        updated_ids_count += 1
 
     # Once again, this came from the development and is not required anymore, especially
     # since by default the script is working on copies of the original files.
@@ -977,6 +1019,7 @@ def update_db_table_ids(
         # Write the updated database back to the file.
         con.commit()
     con.close()
+    print(f"{updated_ids_count} IDs updated.")
 
 
 def get_ids():
@@ -995,7 +1038,6 @@ def get_ids():
         # Omit IDs that haven't changed at all. Happens if not _all_ paths are modified
         if new_guid != guid:
             id_replacements_bin[guid] = new_guid
-    con.close()
 
     ### Adapted from jellyfin_id_scanner
     id_replacements_str               = {bid2sid(k): bid2sid(v) for k, v in id_replacements_bin.items()}
@@ -1015,16 +1057,35 @@ def get_ids():
     ### End of adapted code
 
     # Check for collisions between old and new ids in both the normal and ancestor format.
-    # If there are any, the resulting DB / Files probably won't work properly!!
-    collision = set(id_replacements_str.keys())
-    collision.update(id_replacements_str.values())
-    collision.update(id_replacements_ancestor_str.keys())
-    collision.update(id_replacements_ancestor_str.values())
-    collisions = 4 * len(id_replacements_str.keys()) - len(collision)
-    if collisions > 0:
-        print(f"Warning! {collisions} collision(s) between old and new ID strings detected. The resulting database "
-              f"will at least partially not work as expected and link stuff together that doesn't belong together. "
-              f"Jellyfin MIGHT fix this automatically but there's no guarantee whatsoever. ")
+    # If there are collisions, get the (new) filepaths causing them
+    uniques = set()
+    duplicates = list()
+    for id in id_replacements_str.values():
+        if id in uniques:
+            duplicates.append(id)
+        else:
+            uniques.add(id)
+
+    # if there are duplicates, find the matching old_ids to query the lines from the database
+    if duplicates:
+        old_ids = []
+        for k, v in id_replacements_str.items():
+            if v in duplicates:
+                old_ids.append(sid2bid(k))
+
+        duplicates = [next(cur.execute("SELECT `guid`, `Path` FROM `TypedBaseItems` WHERE `guid` = ?", (guid,))) for guid in old_ids]
+
+        print(f"Warning! {len(duplicates)} duplicates detected within new ids. This indicates that you're "
+              f"merging media files from different directories into fewer ones. If that's the case for all the "
+              f"collisions listed below, you can likely ignore this warning, otherwise recheck your path settings. "
+              f"IMPORTANT: The duplicated entries will be removed from the database. You got a backup of the "
+              f"database, right?")
+        print("Duplicates: ")
+        for id, path in duplicates:
+            print(f"  Item ID: {bid2sid(id)} Path: {path}")
+        input("Press Enter to continue or CTRL+C to abort. ")
+
+    con.close()
 
     return ids
 
@@ -1033,40 +1094,42 @@ def update_ids():
     return
 
 
-# no motivation to write this in a clean way. I know it's ironic; a script
-# that only exists because someone else's code is a clusterfork is heading
-# into the exact same direction.
-def update_ids_old_stuff(id_replacements_str_all:dict):
-    global target_root
-    db_todo = {}
+def jf_date_str_to_python_ns(s: str):
+    # Python datetime has only support for microseconds because of resolution
+    # problems. To convert from a date+time to ticks, the fractional seconds
+    # part doesn't matter anyway (it remains the same). Hence, it's cut off
+    # and added back later.
+    subseconds = "0"
+    if "." in s:
+        s, subseconds = s.rsplit(".", 1)
+    # In case subseconds has a higher resolution than 100ns and/or additional
+    # information (f.ex. timezone, which is known to be UTC+00:00 for jellyfin),
+    # Strip all of it.
+    # Add trailing zeros til the ns digit, then convert to int, and we have ns.
+    subseconds = int(subseconds.split("+")[0].rstrip(ascii_letters).ljust(9, "0"))
+    # Add explicit information about the timezone (UTC+00:00)
+    s += "+00:00"
+    t = int(datetime.datetime.fromisoformat(s).timestamp())
+    # Convert to ns
+    t *= 1000000000
+    t += subseconds
+    return t
 
-    for file in target_root.glob("**/*"):
-        if "cache" in file.parts or "log" in file.parts:
-            continue
-        elif file.suffix == ".xml":
-            tree = ET.parse(file)
-            root = tree.getroot()
-            modified = 0
-            for el in root.iter():
-                el.text, mo, ig = recursive_id_path_replacer(el.text, id_replacements_str_all)
-                modified += mo
-            if modified:
-                tree.write(file)  # , encoding="utf-8")
-        elif file.suffix in (".js", ".json"):
-            with open(file) as f:
-                j = f.read()
-            if not j:
-                continue
-            j = json.loads(j)
-            j, modified, ig = recursive_id_path_replacer(j, id_replacements_str_all)
-            if modified:
-                with open(file, "w") as f:
-                    json.dump(j, f, indent=2)
 
-    # Now for the fun part: These IDs are also used in some file paths. So the path structure needs to be
-    # updated, too. This, again, is not the nicest solution, but it was the lowest-effort solution
-    # based on the exising code.
-    ...
+# Convert a _python_ timestamp (float seconds since epoch, which is os dependent)
+# to a ISO like date string as found in the jellyfin database. I have no idea
+# if this works for all OS'es in all timezones. Very likely not but that whole
+# topic is about as much of a mess as jellyfin's databases. If you got any issues,
+# I'm sorry. If you find a solution, them, please let me know!
+def get_datestr_from_python_time_ns(time_ns: int):
+    # Datetime has no support for sub-microsecond resolution (which is required here).
+    # Doesn't matter anyway, we can add the whole sub-second part afterwards.
+    time_s = time_ns // 1000000000
+    time_frac_s_100ns = (time_ns // 100) % 10000000
+    timestamp = datetime.datetime.utcfromtimestamp(time_s).isoformat(sep=" ", timespec="seconds")
+    # Add back the sub-seconds part and the UTC time zone
+    timestamp += "." + str(time_frac_s_100ns).rjust(7, "0").rstrip("0") + "Z"
+    return timestamp
 
 
 def delete_empty_folders(dir:str):
@@ -1080,6 +1143,66 @@ def delete_empty_folders(dir:str):
                 print("Removing empty folder", p)
                 p.rmdir()
                 done = False
+
+
+def update_file_dates():
+    global library_db_target_path, fs_path_replacements
+
+    print("Updating file dates... Note: Reading file dates seems to be quite slow. "
+          "This will take a couple minutes")
+
+    con = sqlite3.connect(library_db_target_path)
+    cur = con.cursor()
+
+    rows = [r for r in cur.execute("SELECT `rowid`, `Path`, `DateCreated`, `DateModified` FROM `TypedBaseItems`")]
+
+    progress = 0
+    rowcount = len(rows)
+    t = time()
+
+    for rowid, target, date_created, date_modified in rows:
+        progress += 1
+        # Print the progress every second. Note: this is the only usage of the "progress" variable.
+        now = time()
+        if now - t > 1:
+            print(f"Progress: {progress} / {rowcount} rows")
+            t = now
+
+        if not target:
+            continue
+        # Determine file path as seen by this script (see fs_path_replacements for details)
+        # Code taken from get_target
+        target, idgaf1, idgaf2 = recursive_root_path_replacer(target, to_replace=fs_path_replacements)
+        target = Path(target)
+        if not target.is_absolute():
+            if target.is_relative_to("/"):
+                # Otherwise the line below will make target relative to the _root_ of target_root
+                # instead of relative to target_root.
+                target = target.relative_to("/")
+            target = target_root / target
+        # End of code taken from get_target
+
+        if not target.exists():
+            print("File doesn't seem to exist; can't update it's dates in the database: ", target)
+            continue
+
+        filestats = os.stat(target)
+
+        new_date_created  = get_datestr_from_python_time_ns(filestats.st_ctime_ns)
+        new_date_modified = get_datestr_from_python_time_ns(filestats.st_mtime_ns)
+
+        date_created_ns  = jf_date_str_to_python_ns(date_created)
+        date_modified_ns = jf_date_str_to_python_ns(date_modified)
+
+        if date_created_ns < 0:
+            cur.execute("UPDATE `TypedBaseItems` SET `DateCreated` = ? WHERE `rowid` = ?",
+                        (new_date_created, rowid))
+        if date_modified_ns < 0:
+            cur.execute("UPDATE `TypedBaseItems` SET `DateModified` = ? WHERE `rowid` = ?",
+                        (new_date_modified, rowid))
+
+    con.commit()
+    print("Done.")
 
 
 if __name__ == "__main__":
@@ -1108,7 +1231,7 @@ if __name__ == "__main__":
     for i, job in enumerate(todo_list_id_paths):
         todo_list_id_paths[i]["replacements"] = id_replacements_path
 
-    # Replace all paths with ids - both in the file system as well as within files.
+    # Replace all paths with ids - both in the file system and within files.
     process_files(
         todo_list_id_paths,
         process_func=process_file,
@@ -1125,3 +1248,6 @@ if __name__ == "__main__":
         replace_func=None,
         path_replacements = path_replacements,
     )
+
+    # Finally, update the file dates in the db.
+    update_file_dates()
