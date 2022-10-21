@@ -68,6 +68,8 @@ Optional:
 	* You need to check for all the columns if they contain paths. Some may have a lot of empty entries; in that case it's useful to sort them ascending and descending. Then you're sure you don't have missed anything. 
 	* Some columns may contain more complex structures in which paths are embedded. In particular, this script supports embedded JSON strings and what I'd call "Jellyfin Image Metadata". If you search for "Jellyfin Image Metadata" within the script, you can find a comment that explains the format. 
 	* You also need to scan the database for IDs that may be used to identify the entries and their relations with other files. There's a script for that (see [ID Scanner](#id-scanner).
+* **Careful with your network configuration!** You might want to *not* migrate / overwrite that file, since networking in Docker is quite different than networking under Windows f.ex. In my case, I suggest you to keep the `network.xml` file that comes with your fresh Jellyfin Docker installation. Path to the file under Windows (once again, you can probably find the file in your case, too): `C:\ProgramData\Jellyfin\Server\config\network.xml`
+
 
 ### Configuration
 
@@ -151,6 +153,12 @@ Causes and solutions:
 	* In my case this happened for a lot of metadata folders that were actually empty to begin with. I don't know why there were empty folders but okay. Since the script only copies *files*, those folders had not been copied. If you checked that in your original installation those directories were actually empty, it's probably (!) okay.
 	* If you checked the original installation and there *are* files that should have been copied, your `todo_list_paths` likely doesn't cover all the files. Meaning, paths in the database have been updated, but the corresponding files haven't been copied.
 	* If you know the files / folders exist, there's likely an issue with your `fs_path_replacements` dict. Make sure it properly maps the path shown in this message to the path required for this script to find the file (Network drive mapping, docker mappings, ...). Read the information here and in the script source about that dictionary for details. 
+	
+### Server not accessible after migration
+
+Check out [Preparation / Recommended Steps](#preparation-recommended-steps). You likely overwrote Jellyfins network configuration file (`network.xml`), which is about the only file you don't necessarily want to migrate since your new installation likely has a different network setup than your previous one. Again, check out the details above. 
+
+I also had the issue that the server just seemed to be unreachable (got the "Select Server" page or an error message on log in). In reality, it was just some browser cache issue. To verify that, try accessing your server from a private browser tab or even a different device. If you've verified that it's the browser cache, check how to delete it (restart probably helps). In my case (Firefox) CTRL+F5 did the job. 
 	
 ## ID Scanner
 
