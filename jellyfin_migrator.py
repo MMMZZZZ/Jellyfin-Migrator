@@ -30,10 +30,41 @@ from string import ascii_letters
 import os
 
 
+# TODO BEFORE YOU START:
+# * Create a copy of the jellyfin database you want to migrate
+# * Delete the following temp/cache folders (resp. the matching
+#   folders for your installation)
+#   * C:/ProgramData/Jellyfin/Server/cache
+#   * C:/ProgramData/Jellyfin/Server/log
+#   * C:/ProgramData/Jellyfin/Server/data/subtitles
+#     Note: this only contains *cached* subtitles that have been
+#           extracted on-the-fly from files streamed to clients.
+#   * RTFM (read the README.md) and you're ready to go.
+#   * Careful when replacing everything in your new installation,
+#     you might want to *not* copy your old network settings
+#     (C:/ProgramData/Jellyfin/Server/config/networking.xml)
+
+
+# Please specify a log file. The script is rather verbose and important
+# errors might get lost in the process. You should definitely check the
+# log file after running the script to see if there are any warnings or
+# other important messages! Use f.ex. notepad++ (npp) to quickly
+# highlight and remove bunches of uninteresting log messages:
+#   * Open log file in npp
+#   * Go to "Search -> Mark... (CTRL + M)"
+#   * Tick "Bookmark Line"
+#   * Search for strings that (only!) occur in the lines you want to
+#     remove. All those lines should get a marking next to the line number.
+#   * Go to "Search -> Bookmark -> Remove Bookmarked Lines"
+#   * Repeat as needed
+# Text encoding is UTF-8 (in npp selectable under "Encoding -> UTF-8")
+log_file = "D:/jf-migrator.log"
+
+
 # These paths will be processed in the order they're listed here.
 # This can be very important! F.ex. if specific subfolders go to a different
 # place than stuff in the root dir of a given path, the subfolders must be
-# processed first. Otherwise they'll be moved to the same place as the other
+# processed first. Otherwise, they'll be moved to the same place as the other
 # stuff in the root folder.
 # Note: all the strings below will be converted to Path objects, so it doesn't
 # matter whether you write / or \\ or include a trailing / . After the path
@@ -45,7 +76,7 @@ import os
 # because (back)slashes occur in other strings, too, where they must not be
 # changed.
 path_replacements = {
-    # Self explanatory, I guess.
+    # Self-explanatory, I guess. "\\" if migrating *to* Windows, "/" else.
     "target_path_slash": "/",
     # Paths to your libraries
     "D:/Jellyfin-Test/Shows": "/data/tvshows",
@@ -61,7 +92,7 @@ path_replacements = {
     "C:/ProgramData/Jellyfin/Server/log": "/config/log",
     "C:/ProgramData/Jellyfin/Server": "/config/data", # everything else: metadata, plugins, ...
     "C:/ProgramData/Jellyfin/Server/transcodes": "/config/data/transcodes",
-    "C:/Program Files/Jellyfin/Server/ffmpeg.exe": "/usr/lib/jellyfin-ffmpeg/ffmpegs",
+    "C:/Program Files/Jellyfin/Server/ffmpeg.exe": "usr/lib/jellyfin-ffmpeg/ffmpeg",
     "%MetadataPath%": "%MetadataPath%",
     "%AppDataPath%": "%AppDataPath%",
 }
@@ -69,20 +100,23 @@ path_replacements = {
 
 # This additional replacement dict is required to convert from the paths docker
 # shows to jellyfin back to the actual file system paths to figure out where
-# the files shall be copied. These replacements are done relative to target_root.
-# Not required if:
-#   * You're not targetting docker
-#   * Docker is configured to not map any paths differently than how they are
-#     on the disk
-# In these cases remove all entries except for "target_path_slash".
+# the files shall be copied. If relative paths are provided, the replacements
+# are done relative to target_root.
+# Even if you're not using docker or not using path mapping with docker,
+# you probably do need to add some entries for accessing the media files
+# and appdata/metadata files. This is because the script must read all the
+# file creation and modification dates *as seen by jellyfin*.
+# If you actually don't need any of this (f.ex. running the script in the
+# same environment as jellyfin, you still must not remove the "target_path_slash"
+# entry (and probably keep the app-/metadata entries as well).
 fs_path_replacements = {
     "target_path_slash": "/",
     "/config": "/",
+    "%AppDataPath%": "/data/data",
+    "%MetadataPath%": "/data/metadata",
     "/data/tvshows": "Y:/Serien",
     "/data/movies": "Y:/Filme",
     "/data/music": "Y:/Musik",
-    "%AppDataPath%": "/data/data",
-    "%MetadataPath%": "/data/metadata",
 }
 
 
@@ -93,18 +127,9 @@ fs_path_replacements = {
 # and then do the replacement according to the path_replacements dict.
 # This is required if you copied your jellyfin DB to another location and then
 # start processing it with this script.
-#
-# TODO media_root: If your migration process is like mine it looks like this:
-# You copy your Jellyfin database to some directory, maybe on your old Jellyfin
-# server, maybe on some other computer. Separate from that, you copy / move your
-# media files to their new location. Then you run this script to adjust the
-# Jellyfin databases accordingly. This process however needs access to the
-# library files _at their final location_ because it needs to get the file
-# creation and modification dates as jellyfin will see them after the migration.
-# .
 original_root = Path("C:/ProgramData/Jellyfin/Server")
 source_root = Path("D:/Jellyfin/Server")
-target_root = Path("D:/Jellyfin-patched/Server")
+target_root = Path("D:/Jellyfin-dummy")
 
 
 ### The To-Do Lists: todo_list_paths, todo_list_id_paths and todo_list_ids.
@@ -116,9 +141,12 @@ target_root = Path("D:/Jellyfin-patched/Server")
 #   3. The IDs that are used internally and are derived from the paths are updated
 #      1. They occur in jellyfins file paths, so these paths are updated both on the disk and in the databases.
 #      2. All remaining occurences of any IDs are updated throughout all files.
+#   4. Now that all files are where and how they should be, update the file creation and modification
+#      dates in the database.
 # todo_list_paths is used for step 1 and 2
 # todo_list_id_paths is used for step 3.1
 # todo_list_ids is used for step 3.2
+# table and columns for step 4 are hardcoded / determined automatically.
 #
 # General Notes:
 #   * For step 1, "path_replacements" is used to determine the new file paths.
@@ -127,8 +155,8 @@ target_root = Path("D:/Jellyfin-patched/Server")
 #   * In step 3 the "replacements" entry in the todo_lists is auto-generated, no need to touch it either.
 #
 # Notes from my own jellyfin installation:
-#   3.1 seems to be "ancestor-str" formatted IDs only (see jellyfin_id_scanner for details on the format)
-#   3.2 thus only leaves the sqlite .db files.
+#   3.1 seems to be "ancestor-str" and "ancestor" formatted IDs only (see jellyfin_id_scanner for details on the format)
+#   3.2 seems like only certain .db files contain them.
 #   Search for "ID types occurring in paths" to find the place in the code
 #   where you can select the types to include.
 todo_list_paths = [
@@ -408,10 +436,31 @@ todo_list_ids = [
 # Since library.db will be needed throughout the process, its location is stored
 # here once it's been moved and updated with the new paths.
 library_db_target_path = Path()
+library_db_source_path = Path()
 
 
 # Similarly, the IDs are used in "hard-to-reach" places and are thus global, too.
 ids = dict()
+
+
+# Custom print function that prints to both the console as well as to a log file
+logging_newline = False
+def print_log(*args, **kwargs):
+    global log_file, logging_newline
+    print(*args, **kwargs)
+
+    # Each new line gets a timestamp. That requires tracking of (previous)
+    # line endings though. This is not perfect, but perfectly fine for this
+    # script.
+    dt = ""
+    if logging_newline:
+        dt = "[" + datetime.datetime.now().isoformat(sep=" ") + "] "
+    if kwargs.get("end", "\n") == "\n":
+        logging_newline = True
+    else:
+        logging_newline = False
+    with open(log_file, "a", encoding="utf-8") as f:
+        print(dt, *args, **kwargs, file=f)
 
 
 # Recursively replace all paths in "d" which can be
@@ -467,7 +516,7 @@ def recursive_root_path_replacer(d, to_replace: dict):
                 if len(p.parents) > 1 \
                         and not d.startswith("https:") \
                         and not d.startswith("http:"):
-                    print(f"No entry for this (presumed) path: {d}")
+                    print_log(f"No entry for this (presumed) path: {d}")
     return d, modified, ignored
 
 
@@ -600,7 +649,7 @@ def update_db_table(
         # Print the progress every second. Note: this is the only usage of the "progress" variable.
         now = time()
         if now - t > 1:
-            print(f"Progress: {progress} / {rows_count} rows")
+            print_log(f"Progress: {progress} / {rows_count} rows")
             t = now
 
         # Query the columns we want to check/modify of the current row (selected by id).
@@ -613,7 +662,7 @@ def update_db_table(
         # One could argue whether this is an error or not and how it should be processed...
         # Just avoid it, ok?
         if len(row) > 1:
-            print(f"Error: rowid {id} not unique! Skipping this id. ")
+            print_log(f"Error: rowid {id} not unique! Skipping this id. ")
             continue
         # cur.execute returns a 2D tuple, containing all rows matching the query, and then
         # in each row the selected columns. We only selected a single row, hence row[0] is
@@ -648,7 +697,7 @@ def update_db_table(
             ignored  += ig
             result[path_columns[i]] = path
         for i, imgs in enumerate(jf_imgs):
-            # Some DB entries look like this:
+            # Jellyfin Image Metadata. Some DB entries look like this:
             #     %MetadataPath%\library\71\71d037e6e74015a5a6231ce1b7912acf\poster.jpg*637693022742223153*Primary*198*198*eJC5#hK#Dj9GR/V@j]xuX8NG0x+xgN%MxaX7spNGnitQ$kK0wyV@Rj # noqa
             # Yeah. That's a path and some other data within the same string, separated by *. More specifically:
             #     path * last modified date * image type * width * height * blur hash
@@ -681,7 +730,7 @@ def update_db_table(
         # Note that this relies on result.keys() and result.values() returning the entries in the
         # same order (which is guaranteed).
         # Note: it can happen that no changes are made at all. In this case we can abort here and
-        #       go for the next job from the todo list.
+        #       go for the next job from the todo_list.
         if not result:
             continue
         keys = ", ".join([f"`{k}` = ?" for k in result.keys()])
@@ -695,21 +744,21 @@ def update_db_table(
         except Exception as e:
             # This was mainly for debugging purposes and shouldn't be reached anymore. Doesn't
             # hurt to have it though.
-            print("Error:", e)
-            print("Query:", query)
-            print("Args: ", args)
-            print(e)
+            print_log("Error:", e)
+            print_log("Query:", query)
+            print_log("Args: ", args)
+            print_log(e)
             exit()
         else:
             if cur.rowcount < 1:
                 # This was mainly for debugging purposes and shouldn't be reached anymore.
                 # Doesn't hurt to have it though.
-                print("No data modified!")
-                print("Query:", query)
-                print("Args: ", args)
+                print_log("No data modified!")
+                print_log("Query:", query)
+                print_log("Args: ", args)
                 exit()
-    print(f"Processed {rows_count} rows in table {table}. ")
-    print(f"{modified} paths have been modified.")
+    print_log(f"Processed {rows_count} rows in table {table}. ")
+    print_log(f"{modified} paths have been modified.")
 
     # Once again, this came from the development and is not required anymore, especially
     # since by default the script is working on copies of the original files.
@@ -736,7 +785,7 @@ def update_xml(file: Path, replace_dict: dict, replace_func) -> None:
         el.text, mo, ig = replace_func(el.text, replace_dict)
         modified += mo
         ignored  += ig
-    print(f"Processed {ignored + modified} elements. {modified} paths have been modified.")
+    print_log(f"Processed {ignored + modified} elements. {modified} paths have been modified.")
     tree.write(file)  # , encoding="utf-8")
 
 
@@ -794,8 +843,8 @@ def get_target(
                 # j is for the german "ja" which means yes.
                 usure = usure[0].lower().replace("j", "y")
             if usure == "n":
-                print("Skipping this file. If you want to abort the whole process, stop the script"
-                      "with CTRL + C.")
+                print_log("Skipping this file. If you want to abort the whole process, stop the script"
+                          "with CTRL + C.")
                 target = None
             elif usure == "a":
                 # Don't warn about this anymore.
@@ -804,10 +853,10 @@ def get_target(
         if not target.parent.exists():
             target.parent.mkdir(parents=True)
         if not no_log:
-            print("Copying...", target, end=" ")
+            print_log("Copying...", target, end=" ")
         copy(source, target)
         if not no_log:
-            print("Done.")
+            print_log("Done.")
     return target
 
 
@@ -832,7 +881,7 @@ def process_file(
         return
 
     if not no_log:
-        print("Processing", target)
+        print_log("Processing", target)
 
     if copy_only:
         # No need to do any further checks.
@@ -840,12 +889,13 @@ def process_file(
     elif target.suffix == ".db":
         # If it's "library.db", save it for later (see comment at declaration):
         if target.name == "library.db":
-            global library_db_target_path
+            global library_db_source_path, library_db_target_path
+            library_db_source_path = source
             library_db_target_path = target
         # sqlite file. In this case table specifies which tables within that file have columns to check.
         # Iterate over those.
         for table, kwargs in tables.items():
-            print("Processing table", table)
+            print_log("Processing table", table)
             # The remaining function arguments (**kwards) contain the details about the columns to process.
             # See update_db_table and/or the todo_list.
             update_db_table(file=target, replace_dict=replacements, replace_func=replace_func, table=table, **kwargs)
@@ -856,7 +906,7 @@ def process_file(
         with open(target, "r") as f:
             path = f.read()
         path, modified, ignored = replace_func(path, replacements)
-        print(f"Processed {modified + ignored} paths, {modified} paths have been modified.")
+        print_log(f"Processed {modified + ignored} paths, {modified} paths have been modified.")
         with open(target, "w") as f:
             f.write(path)
     elif target.suffix == ".json":
@@ -866,7 +916,7 @@ def process_file(
         with open(target, "r") as f:
             j = json.load(f)
         j, modified, ignored = replace_func(j, replacements)
-        print(f"Processed {modified + ignored} paths, {modified} paths have been modified.")
+        print_log(f"Processed {modified + ignored} paths, {modified} paths have been modified.")
         with open(target, "w") as f:
             # indent 2 seems to be the default formatting for jellyfin json files.
             json.dump(j, f, indent=2)
@@ -878,7 +928,7 @@ def process_file(
         source = target
         target, modified, ignored = recursive_id_path_replacer(source, replacements)
         if modified:
-            print("Changing ID in filepath: ->", target)
+            print_log("Changing ID in filepath: ->", target)
             target = Path(target)
             target.parent.mkdir(parents=True, exist_ok=True)
             source.replace(target)
@@ -902,7 +952,7 @@ def process_files(lst: list, process_func, replace_func, path_replacements):
         if "no_log" not in job:
             job["no_log"] = False
         source = job["source"]
-        print(f"Current job from todo_list: {source}")
+        print_log(f"Current job from todo_list: {source}")
         if "*" in str(source):
             # Path has wildcards, process all matching files.
             #
@@ -952,7 +1002,7 @@ def process_files(lst: list, process_func, replace_func, path_replacements):
                 target=target,
                 **{k: v for k, v in job.items() if k not in ("source", "target")},
             )
-        print("")
+        print_log("")
 
 
 # Note: The .NET .Unicode method encodes as UTF16 little endian:
@@ -974,7 +1024,7 @@ def update_db_table_ids(
 ):
     global ids
 
-    print("Updating Item IDs in database... ")
+    print_log("Updating Item IDs in database... ")
 
     # Initialize sqlite3 objects
     con = sqlite3.connect(target)
@@ -986,7 +1036,7 @@ def update_db_table_ids(
     for table, columns_by_id_type in tables.items():
         for id_type, columns in columns_by_id_type.items():
             for column in columns:
-                print(f"Updating {column} IDs in table {table}...")
+                print_log(f"Updating {column} IDs in table {table}...")
                 # See comment about iterating over rows while modifying them in update_db_table.
                 rows = [r for r in cur.execute(f"SELECT DISTINCT `{column}` from `{table}`")]
                 progress = 0
@@ -997,7 +1047,7 @@ def update_db_table_ids(
                     # Print the progress every second. Note: this is the only usage of the "progress" variable.
                     now = time()
                     if now - t > 1:
-                        print(f"Progress: {progress} / {rowcount} rows")
+                        print_log(f"Progress: {progress} / {rowcount} rows")
                         t = now
                     if old_id in ids[id_type]:
                         new_id = ids[id_type][old_id]
@@ -1007,9 +1057,9 @@ def update_db_table_ids(
                             col_names  = [x[0] for x in cur.execute(f"SELECT name FROM PRAGMA_TABLE_INFO('{table}')")]
                             rows = [x for x in cur.execute(f"SELECT * FROM `{table}` WHERE `{column}` = ?", (old_id,))]
                             rows = [dict(zip(col_names, row)) for row in rows]
-                            print(f"Encountered {len(rows)} duplicated entries")
+                            print_log(f"Encountered {len(rows)} duplicated entries")
                             for i, row in enumerate(rows):
-                                print(f"Deleting ({i+1}/{len(rows)}): ", row)
+                                print_log(f"Deleting ({i+1}/{len(rows)}): ", row)
                             cur.execute(f"DELETE FROM `{table}` WHERE `{column}` = ?", (old_id,))
                         updated_ids_count += 1
 
@@ -1019,7 +1069,7 @@ def update_db_table_ids(
         # Write the updated database back to the file.
         con.commit()
     con.close()
-    print(f"{updated_ids_count} IDs updated.")
+    print_log(f"{updated_ids_count} IDs updated.")
 
 
 def get_ids():
@@ -1073,19 +1123,24 @@ def get_ids():
             if v in duplicates:
                 old_ids.append(sid2bid(k))
 
-        duplicates = [next(cur.execute("SELECT `guid`, `Path` FROM `TypedBaseItems` WHERE `guid` = ?", (guid,))) for guid in old_ids]
+        duplicates_new = [next(cur.execute("SELECT `guid`, `Path` FROM `TypedBaseItems` WHERE `guid` = ?", (guid,))) for guid in old_ids]
+        # also fetch the old paths for better understanding/debugging
+        con.close()
+        con = sqlite3.connect(library_db_source_path)
+        cur = con.cursor()
+        duplicates_old = [next(cur.execute("SELECT `guid`, `Path` FROM `TypedBaseItems` WHERE `guid` = ?", (guid,))) for guid in old_ids]
+        duplicates_old = dict(duplicates_old)
+        con.close()
 
-        print(f"Warning! {len(duplicates)} duplicates detected within new ids. This indicates that you're "
-              f"merging media files from different directories into fewer ones. If that's the case for all the "
-              f"collisions listed below, you can likely ignore this warning, otherwise recheck your path settings. "
-              f"IMPORTANT: The duplicated entries will be removed from the database. You got a backup of the "
-              f"database, right?")
-        print("Duplicates: ")
-        for id, path in duplicates:
-            print(f"  Item ID: {bid2sid(id)} Path: {path}")
+        print_log(f"Warning! {len(duplicates)} duplicates detected within new ids. This indicates that you're "
+                  f"merging media files from different directories into fewer ones. If that's the case for all the "
+                  f"collisions listed below, you can likely ignore this warning, otherwise recheck your path settings. "
+                  f"IMPORTANT: The duplicated entries will be removed from the database. You got a backup of the "
+                  f"database, right?")
+        print_log("Duplicates: ")
+        for id, newpath in duplicates_new:
+            print_log(f"  Item ID: {bid2sid(id)},  Paths (old -> new): {duplicates_old[id]} -> {newpath}")
         input("Press Enter to continue or CTRL+C to abort. ")
-
-    con.close()
 
     return ids
 
@@ -1140,7 +1195,7 @@ def delete_empty_folders(dir:str):
         done = True
         for p in dir.glob("**"):
             if not list(p.iterdir()):
-                print("Removing empty folder", p)
+                print_log("Removing empty folder", p)
                 p.rmdir()
                 done = False
 
@@ -1148,8 +1203,8 @@ def delete_empty_folders(dir:str):
 def update_file_dates():
     global library_db_target_path, fs_path_replacements
 
-    print("Updating file dates... Note: Reading file dates seems to be quite slow. "
-          "This will take a couple minutes")
+    print_log("Updating file dates... Note: Reading file dates seems to be quite slow. "
+              "This will take a couple minutes")
 
     con = sqlite3.connect(library_db_target_path)
     cur = con.cursor()
@@ -1165,7 +1220,7 @@ def update_file_dates():
         # Print the progress every second. Note: this is the only usage of the "progress" variable.
         now = time()
         if now - t > 1:
-            print(f"Progress: {progress} / {rowcount} rows")
+            print_log(f"Progress: {progress} / {rowcount} rows")
             t = now
 
         if not target:
@@ -1183,7 +1238,7 @@ def update_file_dates():
         # End of code taken from get_target
 
         if not target.exists():
-            print("File doesn't seem to exist; can't update it's dates in the database: ", target)
+            print_log("File doesn't seem to exist; can't update its dates in the database: ", target)
             continue
 
         filestats = os.stat(target)
@@ -1202,10 +1257,13 @@ def update_file_dates():
                         (new_date_modified, rowid))
 
     con.commit()
-    print("Done.")
+    print_log("Done.")
 
 
 if __name__ == "__main__":
+    print_log("")
+    print_log("Starting Jellyfin Database Migration")
+
     ### Copy relevant files and adjust all paths to the new locations.
     process_files(
         todo_list_paths,
@@ -1219,6 +1277,7 @@ if __name__ == "__main__":
     get_ids()
     # ID types occurring in paths (<- search for that to find another comment with more details if you missed it)
     # Include/Exclude types (see get_ids) to specify which are used for looking through paths.
+    # Currently, all are included, just to be safe.
     id_replacements_path = {**ids["ancestor-str"], **ids["ancestor-str-dash"], **ids["str"], **ids["str-dash"],
                             "target_path_slash": path_replacements["target_path_slash"]}
 
@@ -1251,3 +1310,6 @@ if __name__ == "__main__":
 
     # Finally, update the file dates in the db.
     update_file_dates()
+
+    print_log("")
+    print_log("Jellyfin Database Migration complete.")
