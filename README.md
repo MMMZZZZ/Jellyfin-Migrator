@@ -16,6 +16,7 @@ Script to migrate an entire Jellyfin database.
 * [Troubleshooting](#troubleshooting)
 * [ID Scanner](#id-scanner)
 	* [Usage](#usage)
+* [Credits](#credits)
 * [License](#license)
 
 ## Description
@@ -171,6 +172,10 @@ Unlike the main migrator script, this smaller one actually presents a command li
 ```python jellyfin_id_scanner.py --library-db "C:\Some\Path\library.db" --scan-db "C:\Some\JF\Pluging\PluginDB.db```
 
 Using `--help` gives a more detailed description if required. 
+
+## Credits
+
+Big thank you goes to the devs in the [official Jellyfin chats](https://jellyfin.org/contact) that pointed me to the correct places in the jellyfin sources and helped me figure out how certain things work under the hood! 
 
 ## License
 
