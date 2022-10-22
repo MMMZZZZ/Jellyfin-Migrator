@@ -39,7 +39,7 @@ Note: This script should in theory be able to migrate from Docker to Windows, to
 * Plugins
 	* Those that I have installed migrated without issues. Might not be true in your case.
 * Fixes all paths
-	* Allows for a pretty much arbitrary reorganization of the paths. 
+	* Allows for a pretty much arbitrary reorganization of the paths. This includes merging media files from different directories into the same one (need to be of the same type though. merging movies with music won't work). 
 	* Goes through all relevant files of the database and adjusts the paths. 
 	* Reorganizes the copied and adjusted files according to these paths. 
 
@@ -49,7 +49,7 @@ Note: This script should in theory be able to migrate from Docker to Windows, to
 
 * Install [Python](https://www.python.org/downloads/) 3.9 or higher (no guarantee for previous versions). On Windows, tick the option to add python to the PATH variable during the installation. No additional python modules required.
 * Download/Clone this repository, particularly the jellyfin_migrator.py file. 
-* Install your new jellyfin server. Check that it's up and running. 
+* Install your new jellyfin server. In particular, make sure the webinterface can be reached (a.k.a. the network configuration works) and complete the initial setup. It's not strictly necessary to add any libraries, just make it to the homescreen. 
 
 Optional:
 
@@ -59,22 +59,23 @@ Optional:
 ### Preparation / Recommended Steps
 
 * Copy your current jellyfin database to a different folder. Since you're processing many small files, an SSD is highly recommended. You're not forced to copy your files before starting the migration, the script *can* work with the original files and won't modify them. However, I wouldn't recommend it and there are other reasons to not do it (see below).
-* Your jellyfin database contains some files that don't need to be migrated and can safely be deleted. While this wouldn't hurt your current jellyfin installation if you deleted the files in its database, I strongly recommend to only delete files in the copy from step 1 - then you don't loose anything if I'm mistaken! Here are the paths for a typical windows installation. You can probably figure out the matching paths for your installation, too.
+* Your target directory for the migration should be on an SSD, too. Can be the same; SSDs don't mind reading/writing lots of small files. If you're on spinning drives though, I recommend putting source and target directory on separate drives. Furthermore, your target directory does *not* need to be in your docker container where jellyfin will run later. You can migrate the database first and copy it to it's actual destination afterwards. 
+* Your jellyfin database contains some files that don't need to be migrated and can (AFAIK!) safely be deleted. While this wouldn't hurt your current jellyfin installation if you deleted the files in its database, I strongly recommend to only delete files in the copy (see above) - then you don't loose anything if I'm mistaken! Here are the paths for a typical windows installation. You can probably figure out the matching paths for your installation, too.
 	* `C:\ProgramData\Jellyfin\Server\cache`
 	* `C:\ProgramData\Jellyfin\Server\log`
-	* `C:\ProgramData\Jellyfin\Server\data\subtitles` - Note: these are actually only cached subtitles. Whenever streaming a media file with embedded subtitles, jellyfin extracts them on the fly and saves them here. AFAIK no data is lost when deleting them.
-* Your target directory for the migration should be on an SSD, too. Can be the same; SSDs don't mind reading/writing lots of small files. If you're on spinning drives though, I recommend putting source and target directory on separate drives. Furthermore, your target directory does *not* need to be in your docker container where jellyfin will run later. You can migrate the database first and copy it to it's actual destination afterwards. 
+	* `C:\ProgramData\Jellyfin\Server\data\subtitles` - Note: these are actually only cached subtitles. Whenever jellyfin's streaming a media file with embedded subtitles, it extracts them on the fly and saves them here. AFAIK no data is lost when deleting them. In any case, the script is *not* able to migrate these properly. 
 * Plugins. The few plugins I got migrated without issues. You may have different ones though that require more attention. Plugins may come with their own .db database files. You need to open them and check every table and column for file paths and IDs that the script needs to process:
 	* Open the database in the DB Browser (see [Installation](#installation)). Select the tab "Browse Data". Then you can select the table (think of it as a sheet within an Excel file) in the drop-down menu at the top left. 
 	* You need to check for all the columns if they contain paths. Some may have a lot of empty entries; in that case it's useful to sort them ascending and descending. Then you're sure you don't have missed anything. 
 	* Some columns may contain more complex structures in which paths are embedded. In particular, this script supports embedded JSON strings and what I'd call "Jellyfin Image Metadata". If you search for "Jellyfin Image Metadata" within the script, you can find a comment that explains the format. 
 	* You also need to scan the database for IDs that may be used to identify the entries and their relations with other files. There's a script for that (see [ID Scanner](#id-scanner).
-* **Careful with your network configuration!** You might want to *not* migrate / overwrite that file, since networking in Docker is quite different than networking under Windows f.ex. In my case, I suggest you to keep the `network.xml` file that comes with your fresh Jellyfin Docker installation. Path to the file under Windows (once again, you can probably find the file in your case, too): `C:\ProgramData\Jellyfin\Server\config\network.xml`
-
+* **Careful with your network configuration!** You might want to *not* migrate / overwrite that file, since networking in Docker is quite different than networking under Windows f.ex. I suggest you to keep the `network.xml` file from your new Jellyfin installation. Path to the file under Windows (once again, you can probably find the file in your case, too): `C:\ProgramData\Jellyfin\Server\config\network.xml`
 
 ### Configuration
 
-* Open the python file in your preferred text editor (if you have none, I recommend notepad++).
+Every installation is different, therefore you need to adjust the paths in the script so that it matches your particular migration. This is the reason why you had get your new jellyfin server already up and running; to make sure that you can figure out where all the files belong. Don't worry, you don't have to start from scratch. All the paths I had to adjust are still included in the script, so you'll know what to look for. 
+
+* Open the python file in your preferred text editor (if you have none, I recommend [Notepad++](#installation).
 * The entire file is fairly well commented. Though the interesting stuff for you as a user is all at the beginning of the file.
 * `log_file`: Please provide a filepath where the script can log everything it does. This is not optional. 
 * `path_replacements`: Here you specify how the paths are adapted. Please read the notes in the python file.
@@ -91,11 +92,11 @@ Optional:
 ### Test it
 
 * Run the script. Can easily take a few minutes. 
-	* To run the script, open a CMD/PowerShell/... window in the folder with the python file (SHIFT + right click => open PowerShell here). Type `python jellyfin_migrator.py` and hit enter. 
-	* Carefully check the log file for issues (See troubleshooting
-* As a first check after the script has finished, you can search through the new database with any search tool (f.ex. Agent Ransack) for some of the old paths. Except for cache and log files (which you can and probably should delete) there shouldn't be any hits. Well, except for the SQLite `.db` files. Apparently there's some sort of "lazy" updating which does not remove the old values entirely. 
+	* To run the script (on Windows), open a CMD/PowerShell/... window in the folder with the python file (SHIFT + right click => open PowerShell here). Type `python jellyfin_migrator.py` and hit enter. Linux users probably know how to do it anyways. 
+	* Carefully check the log file for issues (See [Troubleshooting](#troubleshooting)).
+* As a first check after the script has finished, you can search through the new database with any search tool (f.ex. Agent Ransack) for some of the old paths. Assuming you omitted all the cache and log files there shouldn't be any hits. Well, except for the SQLite `.db` files. Apparently there's some sort of "lazy" updating which does not remove the old values entirely. 
 * Copy the new database to your new server and run jellyfin. Check the logs. 
-	* If there's any file system related error message there's likely something wrong. Either your `db_path_replacements` doesn't cover all paths, or some files ended up at places where they shouldn't be. I had multiple issues related to the Docker path mapping; took me a few tries to get the files where Docker expects them such that Jellyfin can actually see and access them. 
+	* If there's any file system related error message there's likely something wrong. Either your `path_replacements` doesn't cover all paths, or some files ended up at places where they shouldn't be. I had multiple issues related to the Docker path mapping; took me a few tries to get the files where Docker expects them such that Jellyfin can actually see and access them. 
 	
 ## Troubleshooting
 
