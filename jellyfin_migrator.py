@@ -102,14 +102,24 @@ path_replacements = {
 # shows to jellyfin back to the actual file system paths to figure out where
 # the files shall be copied. If relative paths are provided, the replacements
 # are done relative to target_root.
+#
 # Even if you're not using docker or not using path mapping with docker,
 # you probably do need to add some entries for accessing the media files
 # and appdata/metadata files. This is because the script must read all the
 # file creation and modification dates *as seen by jellyfin*.
+# In that case and if you're sure that this list is 100% correct,
+# *and only then* you can set "log_no_warnings" to True. Otherwise your logs
+# will be flooded with warnings that it couldn't find an entry to modify the
+# paths (which in that case would be fine because no modifications are needed).
+#
 # If you actually don't need any of this (f.ex. running the script in the
-# same environment as jellyfin, you still must not remove the "target_path_slash"
-# entry (and probably keep the app-/metadata entries as well).
+# same environment as jellyfin), remove all entries except for
+#   * "log_no_warnings" (again, can be set to true if you're sure)
+#   * "target_path_slash"
+#   * %AppDataPath%
+#   * %MetadataPath%.
 fs_path_replacements = {
+    "log_no_warnings": False,
     "target_path_slash": "/",
     "/config": "/",
     "%AppDataPath%": "/data/data",
@@ -515,7 +525,8 @@ def recursive_root_path_replacer(d, to_replace: dict):
                 # Also exclude URLs. Btw: pathlib can be quite handy for messing with URLs.
                 if len(p.parents) > 1 \
                         and not d.startswith("https:") \
-                        and not d.startswith("http:"):
+                        and not d.startswith("http:") \
+                        and not to_replace.get("log_no_warnings", False):
                     print_log(f"No entry for this (presumed) path: {d}")
     return d, modified, ignored
 
