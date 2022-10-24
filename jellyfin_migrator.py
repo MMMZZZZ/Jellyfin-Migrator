@@ -914,21 +914,21 @@ def process_file(
         update_xml(file=target, replace_dict=replacements, replace_func=replace_func)
     elif target.suffix == ".mblink":
         # .mblink files only contain a path, nothing else.
-        with open(target, "r") as f:
+        with open(target, "r", encoding="utf-8") as f:
             path = f.read()
         path, modified, ignored = replace_func(path, replacements)
         print_log(f"Processed {modified + ignored} paths, {modified} paths have been modified.")
-        with open(target, "w") as f:
+        with open(target, "w", encoding="utf-8") as f:
             f.write(path)
     elif target.suffix == ".json":
         # There are also json files with the ending .js but I haven't found any with paths.
         # Load the file by the json module (resulting in a dict or list object) and process
         # them by recursive_path_replacer which handles these structures.
-        with open(target, "r") as f:
+        with open(target, "r", encoding="utf-8") as f:
             j = json.load(f)
         j, modified, ignored = replace_func(j, replacements)
         print_log(f"Processed {modified + ignored} paths, {modified} paths have been modified.")
-        with open(target, "w") as f:
+        with open(target, "w", encoding="utf-8") as f:
             # indent 2 seems to be the default formatting for jellyfin json files.
             json.dump(j, f, indent=2)
 
