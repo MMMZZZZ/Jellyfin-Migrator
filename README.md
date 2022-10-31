@@ -103,9 +103,15 @@ This might seem complicated at first; I suggest you to check the [examples](#exa
 	
 ## Troubleshooting
 
-Here are some common error messages and what to do with them. The log file is your friend!
+This section lists the most common errors and what to do with them. 
 
-### General tips:
+If the tips and explanations below don't resolve your problem, check the [issues](https://github.com/MMMZZZZ/Jellyfin-Migrator/issues) of this project. Others might have had the same problem. If not, you can open a new issue. 
+Another source of help can be the official Jellyfin chatrooms. With some luck, there's another user who's used this script successfully and can answer your question. 
+If you're requesting help you should include your log file in some form. 
+
+Click on the error messages below to show their description.
+
+<details open><summary><h3>General tips</h3></summary>
 
 * Make sure your `todo_list`s (especially the `todo_list_paths`) actually cover all the files you want to copy / migrate. Jellyfins "core" files should already be covered correctly by the `todo_list`s as they are when downloading the script. However, you may have very different plugins or use very different features of Jellyfin than I do. The only indication that you got for missing files is a warning when updating the file dates (see [below](#file-doesnt-seem-to-exist-cant-update-its-dates-in-the-database)). This may not cover files from plugins though. 
 * Inspect the log file with a decent text editor that allows you to quickly remove uninteresting messages. Here is my workflow for Notepad++ (see [Installation](#installation)):
@@ -117,7 +123,9 @@ Here are some common error messages and what to do with them. The log file is yo
 	* Go to "Search -> Bookmark -> Remove Bookmarked Lines"
 	* Repeat as needed
 
-### Warning! Working on original file! Continue?
+</details>
+
+<details><summary><h3>Warning! Working on original file! Continue?</h3></summary>
 
 Apparently your paths are configured such that one or more file(s) would end up in the same place (meaning, their new path equals their old path). 
 
@@ -127,7 +135,9 @@ Causes and solutions:
 * Maybe some other paths you specified are wrong, too? Copy paste errors? 
 * Check the previous log message(s) to see which path / job caused the issue.
 
-### No entry for this (presumed) path
+</details>
+
+<details><summary><h3>No entry for this (presumed) path</h3></summary>
 
 While updating file paths or IDs within filepaths, the script encountered a string that might be a path but that it cannot process because it doesn't match any of the given replacement rules. 
 
@@ -139,8 +149,10 @@ Causes and solutions:
 * The path points to a file you don't want or need to migrate:
 	* It happens while processing a .db file (scroll back up to find the log message that indicates what file it's processing): Update your rules anyways. Better safe than sorry when it comes to the database files IMO. 
 * If it happens during the ID path migration (Step 3), it likely means that those paths use an ID type that the script doesn't support (yet). You can open an issue but I can't promise a fix. 
-	
-### Warning! duplicates detected within new ids
+
+</details>
+
+<details><summary><h3>Warning! duplicates detected within new ids</h3></summary>
 
 When generating the new IDs for the migrated database, the script found that some IDs occured more than once. 
 
@@ -148,11 +160,15 @@ Causes and solutions:
 
 * Most likely: Folders that used to be different are merged into the same new folder by your path replacement rules. This can be intentional if f.ex. you had media files spread across different drives and now move/copy them into the same folder. If that's indeed the case, you can ignore this message. 
 
-### Encountered duplicated entries | Deleting ...
+</details>
+
+<details><summary><h3>Encountered duplicated entries | Deleting ...</h3></summary>
 
 See [above](#warning-duplicates-detected-within-new-ids). This just informs you about the exact entries that have been deleted from the database.
 
-### File doesn't seem to exist; can't update its dates in the database
+</details>
+
+<details><summary><h3>File doesn't seem to exist; can't update its dates in the database</h3></summary>
 
 The script goes through all the migrated files and folders listed in the library database and tries to retrieve their creation and modified date from the file system. This message means that a file or folder listed in the database could not be found and thus its date can't be updated. 
 
@@ -162,11 +178,15 @@ Causes and solutions:
 * If you checked the original installation and there *are* files that should have been copied, your `todo_list_paths` likely doesn't cover all the files. Meaning, paths in the database have been updated, but the corresponding files haven't been copied.
 * If you know the files / folders exist, there's likely an issue with your `fs_path_replacements` dict. Make sure it properly maps the path shown in this message to the path required for this script to find the file (network drive mapping, Docker mappings, ...). Read the information here and in the script source about that dictionary for details. 
 
-### Server not accessible after migration
+</details>
+
+<details><summary><h3>Server not accessible after migration</h3></summary>
 
 Check out [Preparation / Recommended Steps](#preparation--recommended-steps). You likely overwrote Jellyfins network configuration file (`network.xml`), which is about the only file you don't necessarily want to migrate since your new installation likely has a different network setup than your previous one. Again, check out the details above. 
 
 I also had the issue that the server just seemed to be unreachable (got the "Select Server" page or an error message on log in). In reality, it was just some browser cache issue. To verify that, try accessing your server from a private browser tab or even a different device. If you've verified that it's the browser cache, check how to delete it (restart probably helps). In my case (Firefox) CTRL+F5 did the job. 
+
+</details>
 	
 ## Examples
 
