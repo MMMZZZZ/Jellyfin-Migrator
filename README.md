@@ -27,6 +27,8 @@ I wanted to migrate my Jellyfin installation from Windows to Docker on Linux. Tu
 
 Sadly, such a script did not exist at that time so I created one. And it works! It's not a one-click solution for sure; you _will_ need to take some time configuring the script properly. However, I gave my best to give you all the resources you need within this readme. Please read it carefully. Installation, configuration, trouble shooting, detailed examples - it's all there. 
 
+**Important**: This script is not maintained by the Jellyfin developers. If this script causes any issues, don't report them to the Jellyfin team. Check out the [Troubleshooting](#troubleshooting) instead if you're stuck. 
+
 ## Features
 
 * Creates a complete copy of your Jellyfin database.
@@ -42,8 +44,9 @@ Sadly, such a script did not exist at that time so I created one. And it works! 
 	* Allows for a pretty much arbitrary reorganization of the paths. This includes merging media files from different directories into the same one (need to be of the same type though. merging movies with music won't work). 
 	* Goes through all relevant files of the database and adjusts the paths. 
 	* Reorganizes the copied and adjusted files according to these paths. 
+* Tested with Jellyfin 10.7.7 and 10.8. Unless the Jellyfin gets some major under-the-hood rework, I expect this script to remain compatible with future versions. 
 
-Note: This script has been tested on Windows only, and for migrations from Windows to Docker only. In theory it should be able to migrate from Docker to Windows, too. But a) I'm not sure anyone ever wanted to migrate in that direction and b) I'm not sure it actually works. 
+Note: This script has been tested for migrations from Windows to Docker only. In theory it should be able to migrate from Docker to Windows, too. But a) I'm not sure anyone ever wanted to migrate in that direction and b) I'm not sure it actually works. 
 
 ## Usage
 
