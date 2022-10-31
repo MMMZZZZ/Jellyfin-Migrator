@@ -23,11 +23,9 @@ Script to migrate an entire Jellyfin database.
 
 ## Description
 
-I wanted to migrate my Jellyfin installation from Windows to Docker on Linux. Turns out the Jellyfin database is a nightmare. SQLite, XML, JSON, text files, custom structures - all mixed and even nested. And all of these structures contain hardcoded, absolute paths. 
+I wanted to migrate my Jellyfin installation from Windows to Docker on Linux. Turns out the Jellyfin database is a nightmare - to the point that it's simply not possible to migrate the installation without a script like this (details [below](#technical-documentation) for those that are interested). 
 
-That's the reason why I wrote this script. It goes through all the relevant files and replaces the paths as specified (and quite a few other things). I can't guarantee that it works in your case; I'd even bet it doesn't work without some sort of modification because every Jellyfin instance is different (just think about the plugins...). BUT I think and hope this tool can help many people, including you. 
-
-Note: This script should in theory be able to migrate from Docker to Windows, too. But a) I'm not sure anyone ever wanted to migrate in that direction and b) I'm not sure it actually works. 
+Sadly, such a script did not exist at that time so I created one. And it works! It's not a one-click solution for sure; you _will_ need to take some time configuring the script properly. However, I gave my best to give you all the resources you need within this readme. Please read it carefully. Installation, configuration, trouble shooting, detailed examples - it's all there. 
 
 ## Features
 
@@ -44,6 +42,8 @@ Note: This script should in theory be able to migrate from Docker to Windows, to
 	* Allows for a pretty much arbitrary reorganization of the paths. This includes merging media files from different directories into the same one (need to be of the same type though. merging movies with music won't work). 
 	* Goes through all relevant files of the database and adjusts the paths. 
 	* Reorganizes the copied and adjusted files according to these paths. 
+
+Note: This script has been tested on Windows only, and for migrations from Windows to Docker only. In theory it should be able to migrate from Docker to Windows, too. But a) I'm not sure anyone ever wanted to migrate in that direction and b) I'm not sure it actually works. 
 
 ## Usage
 
