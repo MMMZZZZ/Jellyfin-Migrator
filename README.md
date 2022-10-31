@@ -17,6 +17,7 @@ Script to migrate an entire Jellyfin database.
 * [Examples](#examples)
 * [ID Scanner](#id-scanner)
 	* [Usage](#usage)
+* [Technical Documentation](#technical-documentation)
 * [Credits](#credits)
 * [License](#license)
 
@@ -415,6 +416,47 @@ python jellyfin_id_scanner.py --library-db "C:\Some\Path\library.db" --scan-db "
 ```
 
 Using `--help` gives a more detailed description if required. 
+
+## Technical Documentation
+
+This section is dedicated to people who want to know what the script _actually_ does (but don't necessarily want to work their way through my source code). It only gives an overview; the source code definitely contains the more extensive documentation. 
+
+The migration is a multi step process that not only modifies but also reorganizes Jellyfins database structures. The various formats involved (SQLite, JSON, XML, custom formats, pure text) make it impossible to do this "manually" or with some simple-ish SQL queries.
+
+### Path adjustments
+
+Jellyfin mostly uses hardcoded, absolute paths. There are the `%MetadataPath%` and `%AppDataPath%` path variables, but even those paths aren't portable because they use the operating systems slashes (meaning, `\` on Windows and `/` else). Even though Jellyfin might find the files without adjusting the slashes this still matters, see below. 
+Long story short, *every* file path needs to be updated. 
+
+This is what my first version of the script did. Update all paths everywhere. This works, but it doesn't survive a library scan. During the scan, Jellyfin "correctly" detects that all the old files are gone, thus deletes all metadata and rescans everything. I'm not sure whether only one or both of the next two steps fixed this issue since I implemented both at the same time and couldn't care to remove anyone. Seemed to be the cleanest to keep both of them. 
+
+### Item IDs
+
+Internally, Jellyfin identifies files, folders, ... by a unique 32 byte ID. Sounds like a good idea but the implementation is... well judge for yourself. 
+
+The ID is calculated as MD5 of the type of the object as well as its file path. So to maintain a proper database, the IDs must be recalculated and updated whereever they occur. Interesting to note here that the MD5 function used here encodes those strings in UTF-16-le first (because why not I guess...). 
+On top of that, the ID format is not consistent. Depending on the column of the database, it's either in binary form, string form or string form with dashes. However, there were many IDs left that did not match the Item IDs described so far. Only by comparing what _should_ belong together did I notice that sometimes Jellyfin swaps the byte ordering within the IDs. Boy was I banging my head onto the desk when discovering this...
+
+These different IDs of course occur in the database files. More annoyingly (though this kinda makes sense tbh), they also occur in the metadata file paths (among others). Meaning, the script not only checks and updates all the files but also their locations if an ID is detected in their file paths. Luckily, file paths seem to only use a single type of the various ID flavors presented above. Though at this point it wouldn't really matter anymore. 
+
+### File Dates
+
+Jellyfin's main database (`library.db`) also stores file creation and modification dates. I assume (!) that these are used to check if a file has been altered on the file system and that a mismatch would trigger a rescan. Therefore I decided to update these, too. This is the reason why the script needs access to the media files _after being moved/copied to the new server_; to read the "final" file creation and modification dates. 
+
+Note that this opens a whoooole new can of worms, namely time zones, leap years, ... (also see the next section). Luckily, it seems like the default settings for how to read/format date codes from files give the correct results. I really have a "it works. LEAVE IT." approach to this topic and pray that those default settings work for others, too. Again, see the next point for this. 
+
+### Subtitles (useless)
+
+While scanning my installation for IDs to see if there are even more flavors than those listed above I actually found some (ugh...)! The internally stored subtitle files (`.../data/subtitles`) use yet another form of ID that includes the file modification date as .NET ticks ([relevant Jellyfin source code](https://github.com/jellyfin/jellyfin/blob/ac0dbd0b40b51753cb0a431f2fbc1c4e5a843aaf/MediaBrowser.MediaEncoding/Subtitles/SubtitleEncoder.cs#L672-L694)). So what are these ticks? Simple (or so I thought...). They're the number of 100ns intervals since some-long-time-ago-random-date (or epoch for short). That means that I need to recreate the .NET time math _down to the nanoseconds_ to properly calculate the hashes. The issue is that .NET implement time functions and measurement differently. To make matter worse, they're both cross-platform ecosystems. Why is that an issue? Well, operating systems handle time very differently, too (resolution f.ex.). The reason this is so bad is that .NET and python both use to varying degrees their own settings/presets and those from the system. This doesn't really matter if you want to now "what time and date do we have right now". However, if you're counting _nanoseconds since the epoch_ everyhting matters. Are leap years included (usually yes)? Leap days (no clue)? Leap seconds (usually no)? What if the system does not use the gregorian calendar? What resolution does the operating system provide me with? Can my language handle that resolution? Spoiler: nope. Python generally doesn't support date/time with higher than 1us resolution. DOES NOT HELP. 
+
+Jellyfin's databases might be a mess but it seems almost clean in comparison to computer date/time formats. 
+
+I only realized later that these were actually just cache files and don't need to be migrated so I quickly deleted all the related hacky code and called it a day.
+
+### Encodings.......
+
+Encodings definitely compete with date/time formats on the messiness scale. AFAIK jellyfin encodes its files all in UTF-8. While I think that my script handles them properly, I did encounter various issues with metadata and subtitle providers when I used non-ASCII characters. So I'd still strongly advise you to not use any non-ASCII characters in your media folder and file names. Sad that this is still such an issue in 2022. 
+(also, if you're reading this, it's likely way too late for such a recommendation). 
 
 ## Credits
 
