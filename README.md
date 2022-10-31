@@ -49,6 +49,8 @@ Note: This script has been tested on Windows only, and for migrations from Windo
 
 ### Installation
 
+While the script allows you to migrate to Linux (among many other possible migrations), I'm pretty sure the script itself must be executed on a Windows system. I haven't tested it but I think the script cannot work properly on Linux (if interested, details below in the [Technical Documentation](#why-is-the-script-windows-only)).
+
 * Install [Python](https://www.python.org/downloads/) 3.9 or higher (no guarantee for previous versions). On Windows, tick the option to add python to the PATH variable during the installation. No additional python modules required.
 * Download/Clone this repository, particularly the jellyfin_migrator.py file. 
 * Install your new Jellyfin server. In particular, make sure the webinterface can be reached (a.k.a. the network configuration works) and complete the initial setup. It's not necessary to add any libraries, just make it to the homescreen. 
@@ -461,6 +463,12 @@ I only realized later that these were actually just cache files and don't need t
 
 Encodings definitely compete with date/time formats on the messiness scale. AFAIK jellyfin encodes its files all in UTF-8. While I think that my script handles them properly, I did encounter various issues with metadata and subtitle providers when I used non-ASCII characters. So I'd still strongly advise you to not use any non-ASCII characters in your media folder and file names. Sad that this is still such an issue in 2022. 
 (also, if you're reading this, it's likely way too late for such a recommendation). 
+
+### Why is the script Windows only?
+
+The short answer: because of this part of the code: https://github.com/MMMZZZZ/Jellyfin-Migrator/blob/85c095f0ab1db00b7ec7a85718fefec9538a6888/jellyfin_migrator.py#L831-L836
+
+On Windows, paths starting with a `/` are not considered as absolute paths which is very convenient for this script because it allows to distinguish f.ex. between "real" paths (`D:/target folder/some.file`) and "virtual" Docker paths (`/mapped/folder/some.file`). On Linux however, both real and virtual paths would start with `/` and this method doesn't work anymore. There is for sure a way to fix this but I cannot see an easy one. 
 
 ## Credits
 
