@@ -78,7 +78,7 @@ Optional:
 
 Every installation is different, therefore you need to adjust the paths in the script so that it matches your particular migration. This is the reason why you had get your new Jellyfin server already up and running; to make sure that you can figure out where all the files belong. Don't worry, you don't have to start from scratch. All the paths I had to adjust are still included in the script, so you'll know what to look for. 
 
-This might seem complicated at first; I suggest you to check the [examples](#examples) below; they should clear things up!
+This might seem complicated at first; I suggest you to check the [examples](#examples) below. They walk you through the process step by step!
 
 * Open the python file in your preferred text editor (if you have none, I recommend [Notepad++](#installation).
 * The entire file is fairly well commented. Though the interesting stuff for you as a user is all at the beginning of the file.
@@ -363,7 +363,7 @@ That's it! These were the settings that brought my installation from Windows to 
 
 ### Example 2
 
-This second example is from another user of the script. I won't go into too much details since the process is the same as for the first example. The most important differences are that both Jellyfin and Docker were configured for slightly different paths.
+This second example is from another user of the script. I won't go into too much details since the process is the same as for the first example. The most important differences are that both Jellyfin and Docker were configured for slightly different paths than in example 1. 
 
 First of all, Docker was configured to mount `/mnt/user/appdata/jellyfin/config` as `/config` (compare that to the Docker mapping from example 1!). Secondly, the `metadata`, `plugin`, ... folders were _not_ located within a `data` subfolder. Oh, and his media folders were slightly different, of course. 
 
@@ -406,7 +406,7 @@ As teased above, the lack of the `/config` entry in `fs_path_replacements` means
 
 ## ID Scanner
 
-While developing the migrator script I wrote another tool that's contained in this repository:`jellyfin_id_scanner.py`. It scans a database for occurences of the IDs Jellyfin uses internally to identify files and folders and establish relations between them. This is helpful if you got database files from plugins that I don't have. Note that it can only tell you about ID formats it actually knows. 
+While developing the migrator script I wrote another tool that's contained in this repository: `jellyfin_id_scanner.py`. It scans a database for occurences of the IDs Jellyfin uses internally to identify files and folders and establish relations between them. This is helpful if you got database files from plugins that I don't have. Note that it can only tell you about ID formats it actually knows. 
 
 ### Usage
 
@@ -429,7 +429,10 @@ The migration is a multi step process that not only modifies but also reorganize
 Jellyfin mostly uses hardcoded, absolute paths. There are the `%MetadataPath%` and `%AppDataPath%` path variables, but even those paths aren't portable because they use the operating systems slashes (meaning, `\` on Windows and `/` else). Even though Jellyfin might find the files without adjusting the slashes this still matters, see below. 
 Long story short, *every* file path needs to be updated. 
 
-This is what my first version of the script did. Update all paths everywhere. This works, but it doesn't survive a library scan. During the scan, Jellyfin "correctly" detects that all the old files are gone, thus deletes all metadata and rescans everything. I'm not sure whether only one or both of the next two steps fixed this issue since I implemented both at the same time and couldn't care to remove anyone. Seemed to be the cleanest to keep both of them. 
+This is what my first version of the script did. Update all paths everywhere. This is also where publicly available documentation ended at the time of writing this script (may-october 2022). Any tutorial and tool available on the internet does this (and only this) step. 
+It works; everything seems to be there after the migration, but (as others noted, too) it doesn't survive a library scan. During the scan, Jellyfin "correctly" detects that all the old files are gone, thus deletes all metadata and rescans everything.
+
+I'm not sure whether only one or both of the next two steps fix this issue; in any case it's certainly the cleanest solution to have both steps. 
 
 ### Item IDs
 
@@ -462,6 +465,8 @@ Encodings definitely compete with date/time formats on the messiness scale. AFAI
 ## Credits
 
 Big thank you goes to the devs in the [official Jellyfin chats](https://jellyfin.org/contact) that pointed me to the correct places in the Jellyfin sources and helped me figure out how certain things work under the hood! 
+
+Also, apologies for possible future bug reports from people using my tool and encountering weird issues with their Jellyfin installation. I sincerely hope it won't happen.
 
 ## License
 
