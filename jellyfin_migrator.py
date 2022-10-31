@@ -79,7 +79,6 @@ path_replacements = {
     # Self-explanatory, I guess. "\\" if migrating *to* Windows, "/" else.
     "target_path_slash": "/",
     # Paths to your libraries
-    "D:/Jellyfin-Test/Shows": "/data/tvshows",
     "D:/Serien": "/data/tvshows",
     "F:/Serien": "/data/tvshows",
     "F:/Filme": "/data/movies",
@@ -430,11 +429,11 @@ todo_list_ids = [
         "replacements": {"oldids": "newids"},  # Will be auto-generated during the migration.
         "tables": {
             "PlaybackActivity": {
-                "str": [
+                "str": [],
+                "str-dash": [],
+                "ancestor-str": [
                     "ItemId",
                 ],
-                "str-dash": [],
-                "ancestor-str": [],
                 "ancestor-str-dash": [],
                 "bin": [],
             },
@@ -670,10 +669,9 @@ def update_db_table(
         # IDs as tuple. The only other place where this id is used is in the update query
         # at the end of the loop which requires - just like here - a tuple.
         row = [r for r in cur.execute(f"SELECT {columns} FROM `{table}` WHERE `rowid` = ?", id)]
-        # One could argue whether this is an error or not and how it should be processed...
-        # Just avoid it, ok?
-        if len(row) > 1:
-            print_log(f"Error: rowid {id} not unique! Skipping this id. ")
+        # This _should_ not occur, but I think I have seen it happen rarely. Safe is safe.
+        if len(row) != 1:
+            print_log(f"Error with rowid {id}! Resulted in {len(row)} rows instead of 1. Skipping.")
             continue
         # cur.execute returns a 2D tuple, containing all rows matching the query, and then
         # in each row the selected columns. We only selected a single row, hence row[0] is
