@@ -62,15 +62,15 @@ Optional:
 * Copy your current Jellyfin database to a different folder. Since you're processing many small files, an SSD is highly recommended. You're not forced to copy your files before starting the migration, the script *can* work with the original files and won't modify them. However, I wouldn't recommend it and there are other reasons to not do it (see below).
 * Your target directory for the migration should be on an SSD, too. Can be the same; SSDs don't mind reading/writing lots of small files. If you're on spinning drives though, I recommend putting source and target directory on separate drives. Furthermore, your target directory does *not* need to be in your Docker container where Jellyfin will run later. You can migrate the database first and copy it to its actual destination afterwards. 
 * Your Jellyfin database contains some files that don't need to be migrated and can (AFAIK!) safely be deleted. While this wouldn't hurt your current Jellyfin installation if you deleted the files in its database, I strongly recommend to only delete files in the copy (see above) - then you don't loose anything if I'm mistaken! Here are the paths for a typical windows installation. You can probably figure out the matching paths for your installation, too.
-	*`C:\ProgramData\Jellyfin\Server\cache`
-	*`C:\ProgramData\Jellyfin\Server\log`
-	*`C:\ProgramData\Jellyfin\Server\data\subtitles` - Note: these are actually only cached subtitles. Whenever Jellyfin's streaming a media file with embedded subtitles, it extracts them on the fly and saves them here. AFAIK no data is lost when deleting them. In any case, the script is *not* able to migrate these properly. 
+	* `C:\ProgramData\Jellyfin\Server\cache`
+	* `C:\ProgramData\Jellyfin\Server\log`
+	* `C:\ProgramData\Jellyfin\Server\data\subtitles` - Note: these are actually only cached subtitles. Whenever Jellyfin's streaming a media file with embedded subtitles, it extracts them on the fly and saves them here. AFAIK no data is lost when deleting them. In any case, the script is *not* able to migrate these properly. 
 * Plugins. The few [plugins from my installation]() migrated without issues. You may have different ones though that require more attention. Plugins may come with their own `.db` database files. You need to open them and check every table and column for file paths and IDs that the script needs to process:
 	* Open the database in the DB Browser (see [Installation](#installation)). Select the tab "Browse Data". Then you can select the table (think of it as a sheet within an Excel file) in the drop-down menu at the top left. 
 	* You need to check for all the columns if they contain paths. Some may have a lot of empty entries; in that case it's useful to sort them both ascending and descending. Then you're sure you don't have missed anything. 
 	* Some columns may contain more complex structures in which paths are embedded. In particular, this script supports embedded JSON strings and what I'd call "Jellyfin Image Metadata". If you search for "Jellyfin Image Metadata" within the script, you can find a comment that explains the format. 
 	* You also need to scan the database for IDs that may be used to identify the entries and their relations with other files. There's a script for that (see [ID Scanner](#id-scanner).
-* **Careful with your network configuration!** You might want to *not* migrate / overwrite that file, since networking in Docker is quite different than networking under Windows f.ex. I suggest you to keep the`network.xml` file from your new Jellyfin installation. Path to the file under Windows (once again, you can probably find the file in your case, too):`C:\ProgramData\Jellyfin\Server\config\network.xml`
+* **Careful with your network configuration!** You might want to *not* migrate / overwrite that file, since networking in Docker is quite different than networking under Windows f.ex. I suggest you to keep the `network.xml` file from your new Jellyfin installation. Path to the file under Windows (once again, you can probably find the file in your case, too): `C:\ProgramData\Jellyfin\Server\config\network.xml`
 
 ### Configuration
 
@@ -80,24 +80,24 @@ This might seem complicated at first; I suggest you to check the [examples](#exa
 
 * Open the python file in your preferred text editor (if you have none, I recommend [Notepad++](#installation).
 * The entire file is fairly well commented. Though the interesting stuff for you as a user is all at the beginning of the file.
-*`log_file`: Please provide a filepath where the script can log everything it does. This is not optional. 
-*`path_replacements`: Here you specify how the paths are adapted. Please read the notes in the python file.
+* `log_file`: Please provide a filepath where the script can log everything it does. This is not optional. 
+* `path_replacements`: Here you specify how the paths are adapted. Please read the notes in the python file.
 	* The structure you see is what was required for my own migration from Windows to the Linuxserver.io Jellyfin Docker. It might be different in your case. 
 	* Please note that you need to specify the paths _as seen by Jellyfin_ when running within Docker (if you're using Docker). 
 	* Some of them are fairly straight-forward. Others, especially if you migrate to a different target than I did, require you to compare your old and new Jellyfin installation to figure out which files and folders end up where. Again, keep in mind that Docker may remap some of these which must be taken into account. 
-*`fs_path_replacements`: "Undoing" the Docker mapping. This dictionary is used to figure out the actual location of the new files in the filesystem. In my case f.ex.`cache`,`log`,`data`, ... were mapped by Docker to`/config/cache`,`/config/log`,`/config/data` but those folders are actually placed in the root directory of this Docker container.  This dictionary also lists the paths to all media files, because access to those is needed as well even if you don't copy them with this script. 
-*`original_root`: original root directory of the Jellyfin database. On Windows this should be`C:\ProgramData\Jellyfin\Server`.
-*`source_root`: root directory of the database to migrate. This can (but doesn't need to be) different than`original_root`. Meaning, you can copy the entire`orignal_root` folder to some other place, specify that path here and run the script (f.ex. if you want to be 100% sure your original database doesn't get f*ed up. Unless you force the script it's read-only on the source but having a backup never hurts, right?). 
-*`target_root`: target folder where the new database is created. This definitely should be another directory. It doesn't have to be the final directory though. F.ex. I specified some folder on my Windows system and copied that to my Linux server once it was done. 
-*`todo_list`: list of files that need to be processed. This script supports`.db` (SQLite),`.xml`,`.json` and`.mblink` files. The given list should work for "standard" Jellyfin instances. However, you might have some plugins that require additional files to be processed. 
+* `fs_path_replacements`: "Undoing" the Docker mapping. This dictionary is used to figure out the actual location of the new files in the filesystem. In my case f.ex. `cache`, `log`, `data`, ... were mapped by Docker to `/config/cache`, `/config/log`, `/config/data` but those folders are actually placed in the root directory of this Docker container.  This dictionary also lists the paths to all media files, because access to those is needed as well even if you don't copy them with this script. 
+* `original_root`: original root directory of the Jellyfin database. On Windows this should be `C:\ProgramData\Jellyfin\Server`.
+* `source_root`: root directory of the database to migrate. This can (but doesn't need to be) different than `original_root`. Meaning, you can copy the entire `orignal_root` folder to some other place, specify that path here and run the script (f.ex. if you want to be 100% sure your original database doesn't get f*ed up. Unless you force the script it's read-only on the source but having a backup never hurts, right?). 
+* `target_root`: target folder where the new database is created. This definitely should be another directory. It doesn't have to be the final directory though. F.ex. I specified some folder on my Windows system and copied that to my Linux server once it was done. 
+* `todo_list`: list of files that need to be processed. This script supports `.db` (SQLite), `.xml`, `.json` and `.mblink` files. The given list should work for "standard" Jellyfin instances. However, you might have some plugins that require additional files to be processed. 
 	* The entries in the python file should be mostly self-explanatory. 
 
 ### Test it
 
 * Run the script. Can easily take a few minutes. 
-	* To run the script (on Windows), open a CMD/PowerShell/... window in the folder with the python file (SHIFT + right click => open PowerShell here). Type`python jellyfin_migrator.py` and hit enter. Linux users probably know how to do it anyways. 
+	* To run the script (on Windows), open a CMD/PowerShell/... window in the folder with the python file (SHIFT + right click => open PowerShell here). Type `python jellyfin_migrator.py` and hit enter. Linux users probably know how to do it anyways. 
 	* Carefully check the log file for issues (See [Troubleshooting](#troubleshooting)).
-* As a first check after the script has finished, you can search through the new database with any search tool (f.ex. Agent Ransack) for some of the old paths. Assuming you omitted all the cache and log files there shouldn't be any hits. Well, except for the SQLite`.db` files. Apparently there's some sort of "lazy" updating which does not remove the old values entirely. 
+* As a first check after the script has finished, you can search through the new database with any search tool (f.ex. Agent Ransack) for some of the old paths. Assuming you omitted all the cache and log files there shouldn't be any hits. Well, except for the SQLite `.db` files. Apparently there's some sort of "lazy" updating which does not remove the old values entirely. 
 * Copy the new database to your new server and run Jellyfin. Check the logs. 
 	* If there's any file system related error message there's likely something wrong. Either your `path_replacements` don't cover all paths, or some files ended up at places where they shouldn't be. I had multiple issues related to the Docker path mapping; took me a few tries to get the files where Docker expects them such that Jellyfin can actually see and access them. 
 	
@@ -241,26 +241,26 @@ Finally, the script shall put the resulting files at `D:/Jellyfin-patched`. Put 
 Let's start with the media paths since they're easier IMO. 
 
 From the perspective of Jellyfin, any movie that used to be found at `F:/Filme/somedir/somemovie.mkv` is now visible at `/data/movies/somedir/somemovie.mkv` (remember, Jellyfin sees the files and folders where they've been mapped by Docker). So we add the following entry to `path_replacements`:
-	```
-	"F:/Filme": "/data/movies",
-	```
+```
+"F:/Filme": "/data/movies",
+```
 Repeat for the other media locations and we get:
-	```
-	"F:/Filme": "/data/movies",
-	"F:/Musik": "/data/music",
-	"F:/Serien": "/data/tvshows",	
-	"D:/Serien": "/data/tvshows",	
-	```
+```
+"F:/Filme": "/data/movies",
+"F:/Musik": "/data/music",
+"F:/Serien": "/data/tvshows",	
+"D:/Serien": "/data/tvshows",
+```
 Note that you can indeed map both TV Show source folders to the same target folder. Nothing else is needed to merge them together.
 
 Those were the mappings for jellyfin. Now we need to determine how the script is going to access these files _on the new server_. Since my script doesn't run on that server, I created a network share for the `/mnt/user/Media` folder. On the computer that runs the script, this share is mounted under `Y:`. And thus `/mnt/user/Media/Filme` f.ex. ends up at `Y:/Filme`. 
 
 So, to give the script access to the media files, I put this at the end of `fs_path_replacements`:
-	```
-    "/data/tvshows": "Y:/Serien",
-    "/data/movies": "Y:/Filme",
-    "/data/music": "Y:/Musik",
-	```
+```
+"/data/tvshows": "Y:/Serien",
+"/data/movies": "Y:/Filme",
+"/data/music": "Y:/Musik",
+```
 
 That's it. The script can now properly migrate the old paths to the new paths for Jellyfin, and based on the latter ones figure out where it can find the files itself. 
 
@@ -275,39 +275,39 @@ Where things get interesting are the `metadata`, `plugin` and the other remainin
 There are multiple ways to construct the `path_replacements` dictionary from this. You can list all folders individually, but I took a slightly shorter approach:
 
 ```
-    "C:/ProgramData/Jellyfin/Server/config": "/config/config",
-    "C:/ProgramData/Jellyfin/Server/cache": "/config/cache",
-    "C:/ProgramData/Jellyfin/Server/log": "/config/log",
-    "C:/ProgramData/Jellyfin/Server": "/config/data",
+"C:/ProgramData/Jellyfin/Server/config": "/config/config",
+"C:/ProgramData/Jellyfin/Server/cache": "/config/
+"C:/ProgramData/Jellyfin/Server/log": "/config/
+"C:/ProgramData/Jellyfin/Server": "/config/data",
 ```
 
 The first three should be straightforward. The last one uses the fact that the replacements are processed in the exact order you list them. So  after the first three entries, there are only folders left that need to go to `/config/data`. Therefore they don't need to be listed individually like the first three. However, you could just write 
 ```
-    "C:/ProgramData/Jellyfin/Server/metadata": "/config/data/metadata",
+"C:/ProgramData/Jellyfin/Server/metadata": "/config/data/metadata",
 ```
 (and repeat for all the remaining folders). 
 
 As for `fs_path_replacements`, things are a bit different than in the case of the media folders. Anything Jellyfin sees under `/config` is actually located at `/mnt/user/appdata/jellyfin`, which is the _root_ folder for the Jellyfin Docker container. The script puts anything that goes to that path to `target_root`. So f.ex. `/config/data/metadata` shall end up at `target_root /data/metadata`. If you don't specify a full (absolute) path like for the media folders, but only `/data/metadata` f.ex., the script will automatically resolve it within the `target_root` folder. So the `fs_path_replacements` entry could look like this:
 ```
-	"/config/data/metadata": "/data/metadata",
+"/config/data/metadata": "/data/metadata",
 ```
 And you'd repeat that for all folders. However, you'll notice that all these entries share one common thing: the `/config` part is removed. So instead of having all of them listed individually (which is perfectly fine if you don't miss any), all these cases can be covered by this simple entry:
 ```
-	"/config": "/",
+"/config": "/",
 ```
 
 #### %AppDataPath%, %MetadataPath%
 
 These are path variables, meaning, jellyfin replaces them with their actual location. The script needs to do the same. On one hand, we need to make sure the script recognizes them as paths - but we don't need to change them. Hence the `path_replacements` dict needs these two entries:
 ```
-	"%AppDataPath%": "%AppDataPath%",
-	"%MetadataPath%": "%MetadataPath%",
+"%AppDataPath%": "%AppDataPath%",
+"%MetadataPath%": "%MetadataPath%",
 ```
 
 If that doesn't make any sense to you, just ignore those lines and leave them as they are. Hopefully the next part makes more sense though. Just like Jellyfin, the script has to replace those variables, too, to locate the actual files (metadata files f.ex.). In the Windows installation, `%AppDataPath%` and `%MetadataPath%` point to `C:/ProgramData/Jellyfin/Server/data` and `C:/ProgramData/Jellyfin/Server/metadata` respectively. Applying the exact same logic as above, we get the following results for `fs_path_replacements`:
 ```
-    "%AppDataPath%": "/data/data",
-    "%MetadataPath%": "/data/metadata",	
+"%AppDataPath%": "/data/data",
+"%MetadataPath%": "/data/metadata",	
 ```
 
 You might want to go through this for yourself. It's not complicated, but the nested subfolders with identical names do make it confusing a.f. 
@@ -321,21 +321,20 @@ PlaybackActivity  ItemId  ancestor-str (pure)
 ```
  A manual inspection revealed no file paths at all. The `playback_reporting.db` thus only needs to be added to the `todo_list_ids`:
 ```
-        "source": source_root / "data/playback_reporting.db",
-        "target": "auto-existing",             # If you used "auto" in todo_list_paths, leave this on "auto-existing". Otherwise specify same path.
-        "replacements": {"oldids": "newids"},  # Will be auto-generated during the migration.
-        "tables": {
-            "PlaybackActivity": {
-                "str": [],
-                "str-dash": [],
-                "ancestor-str": [
-                    "ItemId",
-				],
-                "ancestor-str-dash": [],
-                "bin": [],
-            },
-        },
+"source": source_root / "data/playback_reporting.db",
+"target": "auto-existing",             # If you used "auto" in todo_list_paths, leave this on "auto-existing". Otherwise specify same path.
+"replacements": {"oldids": "newids"},  # Will be auto-generated during the migration.
+"tables": {
+    "PlaybackActivity": {
+        "str": [],
+        "str-dash": [],
+        "ancestor-str": [
+            "ItemId",
+        ],
+        "ancestor-str-dash": [],
+        "bin": [],
     },
+},
 ```
 
 That's it! These were the settings that brought my installation from Windows to Linux without data loss. 
@@ -391,7 +390,9 @@ While developing the migrator script I wrote another tool that's contained in th
 
 Unlike the main migrator script, this smaller one actually presents a command line interface (might also want to check the [Test it](#test-it) section above): 
 
-```python jellyfin_id_scanner.py --library-db "C:\Some\Path\library.db" --scan-db "C:\Some\JF\Pluging\PluginDB.db```
+```
+python jellyfin_id_scanner.py --library-db "C:\Some\Path\library.db" --scan-db "C:\Some\JF\Pluging\PluginDB.db
+```
 
 Using `--help` gives a more detailed description if required. 
 
