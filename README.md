@@ -122,6 +122,7 @@ Here are some common error messages and what to do with them. The log file is yo
 Apparently your paths are configured such that one or more file(s) would end up in the same place (meaning, their new path equals their old path). 
 
 Causes and solutions:
+
 	* Pretty sure your `source_root` and `target_root` paths are the same. If this is intentional, you can select to get no warnings anymore (until you restart the script)
 	* Maybe some other paths you specified are wrong, too? Copy paste errors? 
 	* Check the previous log message(s) to see which path / job caused the issue.
@@ -131,6 +132,7 @@ Causes and solutions:
 While updating file paths or IDs within filepaths, the script encountered a string that might be a path but that it cannot process because it doesn't match any of the given replacement rules. 
 
 Causes and solutions:
+
 	* It's likely a false-positive and the string you see doesn't contain a path at all. The detection does skip the most common false-positives, but making it any better without risking to ignore actual paths wasn't worth the trouble IMO (since you can just ignore the false warnings). 
 	* The path points to a file you actually want to migrate (meaning, not a cache file or similar): Update your path replacement rules to include this and similar files. 
 	* It could be triggered by `fs_path_replacements` in cases where no `fs_path_replacements` are needed. See [Example 2](#example-2)
@@ -143,6 +145,7 @@ Causes and solutions:
 When generating the new IDs for the migrated database, the script found that some IDs occured more than once. 
 
 Causes and solutions:
+
 	* Most likely: Folders that used to be different are merged into the same new folder by your path replacement rules. This can be intentional if f.ex. you had media files spread across different drives and now move/copy them into the same folder. If that's indeed the case, you can ignore this message. 
 	
 	
@@ -155,6 +158,7 @@ See [above](#warning-duplicates-detected-within-new-ids). This just informs you 
 The script goes through all the migrated files and folders listed in the library database and tries to retrieve their creation and modified date from the file system. This message means that a file or folder listed in the database could not be found and thus its date can't be updated. 
 
 Causes and solutions:
+
 	* In my case this happened for a lot of metadata folders that were actually empty to begin with. I don't know why there were empty folders but okay. Since the script only copies *files*, those folders had not been copied. If you checked that in your original installation those directories were actually empty, it's probably (!) okay.
 	* If you checked the original installation and there *are* files that should have been copied, your `todo_list_paths` likely doesn't cover all the files. Meaning, paths in the database have been updated, but the corresponding files haven't been copied.
 	* If you know the files / folders exist, there's likely an issue with your `fs_path_replacements` dict. Make sure it properly maps the path shown in this message to the path required for this script to find the file (network drive mapping, Docker mappings, ...). Read the information here and in the script source about that dictionary for details. 
@@ -390,7 +394,7 @@ Unlike the main migrator script, this smaller one actually presents a command li
 
 ```python jellyfin_id_scanner.py --library-db "C:\Some\Path\library.db" --scan-db "C:\Some\JF\Pluging\PluginDB.db```
 
-Using`--help` gives a more detailed description if required. 
+Using `--help` gives a more detailed description if required. 
 
 ## Credits
 
