@@ -39,7 +39,7 @@ Note: This script should in theory be able to migrate from Docker to Windows, to
 * Metadata
 	* All images, descriptions, etc. 
 * Plugins
-	* Those that I have installed migrated without issues. Might not be true in your case.
+	* [Those that I have installed](#old-installation) migrated without issues. Might not be true in your case.
 * Fixes all paths
 	* Allows for a pretty much arbitrary reorganization of the paths. This includes merging media files from different directories into the same one (need to be of the same type though. merging movies with music won't work). 
 	* Goes through all relevant files of the database and adjusts the paths. 
@@ -51,22 +51,23 @@ Note: This script should in theory be able to migrate from Docker to Windows, to
 
 * Install [Python](https://www.python.org/downloads/) 3.9 or higher (no guarantee for previous versions). On Windows, tick the option to add python to the PATH variable during the installation. No additional python modules required.
 * Download/Clone this repository, particularly the jellyfin_migrator.py file. 
-* Install your new Jellyfin server. In particular, make sure the webinterface can be reached (a.k.a. the network configuration works) and complete the initial setup. It's not strictly necessary to add any libraries, just make it to the homescreen. 
+* Install your new Jellyfin server. In particular, make sure the webinterface can be reached (a.k.a. the network configuration works) and complete the initial setup. It's not necessary to add any libraries, just make it to the homescreen. 
 
 Optional:
 
 * [DB Browser for SQLite](https://sqlitebrowser.org/)
 * [Notepad++](https://notepad-plus-plus.org/)
+* [FileLocator Lite](https://www.mythicsoft.com/)
 
 ### Preparation / Recommended Steps
 
 * Copy your current Jellyfin database to a different folder. Since you're processing many small files, an SSD is highly recommended. You're not forced to copy your files before starting the migration, the script *can* work with the original files and won't modify them. However, I wouldn't recommend it and there are other reasons to not do it (see below).
-* Your target directory for the migration should be on an SSD, too. Can be the same; SSDs don't mind reading/writing lots of small files. If you're on spinning drives though, I recommend putting source and target directory on separate drives. Furthermore, your target directory does *not* need to be in your Docker container where Jellyfin will run later. You can migrate the database first and copy it to its actual destination afterwards. 
-* Your Jellyfin database contains some files that don't need to be migrated and can (AFAIK!) safely be deleted. While this wouldn't hurt your current Jellyfin installation if you deleted the files in its database, I strongly recommend to only delete files in the copy (see above) - then you don't loose anything if I'm mistaken! Here are the paths for a typical windows installation. You can probably figure out the matching paths for your installation, too.
+* Your target directory for the migration should be on an SSD, too. If you're on spinning drives though, I recommend putting source and target directory on separate drives (with an SSD both can be on the same drive without notable performance issue). Furthermore, your target directory does *not* need to be in your Docker container where Jellyfin will run later. You can migrate the database first and copy it to its actual destination afterwards. 
+* Your Jellyfin database contains some files that don't need to be migrated and can (AFAIK!) safely be deleted. While this wouldn't hurt your current Jellyfin installation if you deleted the files in its database, I strongly recommend to only delete files in the copy (see above) - then you don't loose anything if I'm mistaken! Here are the paths for a typical Windows installation. You can probably figure out the matching paths for your installation, too.
 	* `C:\ProgramData\Jellyfin\Server\cache`
 	* `C:\ProgramData\Jellyfin\Server\log`
 	* `C:\ProgramData\Jellyfin\Server\data\subtitles` - Note: these are actually only cached subtitles. Whenever Jellyfin's streaming a media file with embedded subtitles, it extracts them on the fly and saves them here. AFAIK no data is lost when deleting them. In any case, the script is *not* able to migrate these properly. 
-* Plugins. The few [plugins from my installation]() migrated without issues. You may have different ones though that require more attention. Plugins may come with their own `.db` database files. You need to open them and check every table and column for file paths and IDs that the script needs to process:
+* Plugins. The few [plugins from my installation](#old-installation) migrated without issues. You may have different ones though that require more attention. Plugins may come with their own `.db` database files. You need to open them and check every table and column for file paths and IDs that the script needs to process:
 	* Open the database in the DB Browser (see [Installation](#installation)). Select the tab "Browse Data". Then you can select the table (think of it as a sheet within an Excel file) in the drop-down menu at the top left. 
 	* You need to check for all the columns if they contain paths. Some may have a lot of empty entries; in that case it's useful to sort them both ascending and descending. Then you're sure you don't have missed anything. 
 	* Some columns may contain more complex structures in which paths are embedded. In particular, this script supports embedded JSON strings and what I'd call "Jellyfin Image Metadata". If you search for "Jellyfin Image Metadata" within the script, you can find a comment that explains the format. 
@@ -88,17 +89,17 @@ This might seem complicated at first; I suggest you to check the [examples](#exa
 	* Some of them are fairly straight-forward. Others, especially if you migrate to a different target than I did, require you to compare your old and new Jellyfin installation to figure out which files and folders end up where. Again, keep in mind that Docker may remap some of these which must be taken into account. 
 * `fs_path_replacements`: "Undoing" the Docker mapping. This dictionary is used to figure out the actual location of the new files in the filesystem. In my case f.ex. `cache`, `log`, `data`, ... were mapped by Docker to `/config/cache`, `/config/log`, `/config/data` but those folders are actually placed in the root directory of this Docker container.  This dictionary also lists the paths to all media files, because access to those is needed as well even if you don't copy them with this script. 
 * `original_root`: original root directory of the Jellyfin database. On Windows this should be `C:\ProgramData\Jellyfin\Server`.
-* `source_root`: root directory of the database to migrate. This can (but doesn't need to be) different than `original_root`. Meaning, you can copy the entire `orignal_root` folder to some other place, specify that path here and run the script (f.ex. if you want to be 100% sure your original database doesn't get f*ed up. Unless you force the script it's read-only on the source but having a backup never hurts, right?). 
+* `source_root`: root directory of the database to migrate. This can (but doesn't need to) be different than `original_root`. Meaning, you can copy the entire `orignal_root` folder to some other place, specify that path here and run the script (f.ex. if you want to be 100% sure your original database doesn't get f*ed up. Unless you force the script it's read-only on the source but having a backup never hurts, right?). 
 * `target_root`: target folder where the new database is created. This definitely should be another directory. It doesn't have to be the final directory though. F.ex. I specified some folder on my Windows system and copied that to my Linux server once it was done. 
-* `todo_list`: list of files that need to be processed. This script supports `.db` (SQLite), `.xml`, `.json` and `.mblink` files. The given list should work for "standard" Jellyfin instances. However, you might have some plugins that require additional files to be processed. 
-	* The entries in the python file should be mostly self-explanatory. 
+* `todo_list_paths`, `todo_list_id_paths`, `todo_list_ids`: lists of files that need to be processed. This script supports `.db` (SQLite), `.xml`, `.json` and `.mblink` files. The given lists should work for "standard" Jellyfin instances. However, you might have some plugins that require additional files to be processed. 
+	* The list and their entries are documented in the Python file and / or should be self-explanatory.
 
 ### Test it
 
 * Run the script. Can easily take a few minutes. 
 	* To run the script (on Windows), open a CMD/PowerShell/... window in the folder with the python file (SHIFT + right click => open PowerShell here). Type `python jellyfin_migrator.py` and hit enter. Linux users probably know how to do it anyways. 
 	* Carefully check the log file for issues (See [Troubleshooting](#troubleshooting)).
-* As a first check after the script has finished, you can search through the new database with any search tool (f.ex. Agent Ransack) for some of the old paths. Assuming you omitted all the cache and log files there shouldn't be any hits. Well, except for the SQLite `.db` files. Apparently there's some sort of "lazy" updating which does not remove the old values entirely. 
+* As a first check after the script has finished, you can search through the new database for some of the old paths with any [search tool](#installation) that supports searching through file _contents_ (not only file names like the windows search). Assuming you omitted all the cache and log files there shouldn't be any hits. Well, except for the SQLite `.db` files. Apparently there's some sort of "lazy" updating which does not remove the old values entirely. 
 * Copy the new database to your new server and run Jellyfin. Check the logs. 
 	* If there's any file system related error message there's likely something wrong. Either your `path_replacements` don't cover all paths, or some files ended up at places where they shouldn't be. I had multiple issues related to the Docker path mapping; took me a few tries to get the files where Docker expects them such that Jellyfin can actually see and access them. 
 	
@@ -191,7 +192,7 @@ I also had the issue that the server just seemed to be unreachable (got the "Sel
 	
 ## Examples
 
-This section provides example configurations for two setups that were migrated with this script. By seeing the setupt and the resulting configuration of this script I hope it gets more clear how to adapt it to your own setup. 
+This section provides example configurations for two setups that were migrated with this script. By seeing the setups and the resulting configuration of this script I hope it gets more clear how to adapt it to your own setup. 
 
 ### Example 1
 
@@ -221,7 +222,7 @@ This was my own setup and corresponds to what you'll see in the scrip as well.
 	* MusicBrainz
 	* OMDb
 	* Open Subtitles
-	* **Playback Reporting**
+	* Playback Reporting
 	* Studio Images
 	* TMDb
 	* TVmaze
