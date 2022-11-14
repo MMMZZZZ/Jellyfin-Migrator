@@ -431,8 +431,8 @@ The migration is a multi step process that not only modifies but also reorganize
 
 ### Path adjustments
 
-Jellyfin mostly uses hardcoded, absolute paths. There are the `%MetadataPath%` and `%AppDataPath%` path variables, but even those paths aren't portable because they use the operating systems slashes (meaning, `\` on Windows and `/` else). Even though Jellyfin might find the files without adjusting the slashes this still matters, see below. 
-Long story short, *every* file path needs to be updated. 
+Jellyfin mostly uses hardcoded, absolute paths. There are the `%MetadataPath%` and `%AppDataPath%` path variables, but even those paths use the operating systems slashes (meaning, `\` on Windows and `/` else). Jellyfin might find the files without adjusting the slashes, but I prefer to be safe here and many of them are updated for other reasons anyway ([see below](#item-ids)).
+Long story short, *every* file path is updated. 
 
 This is what my first version of the script did. Update all paths everywhere. This is also where publicly available documentation ended at the time of writing this script (may-october 2022). Any tutorial and tool available on the internet does this (and only this) step. 
 It works; everything seems to be there after the migration, but (as others noted, too) it doesn't survive a library scan. During the scan, Jellyfin "correctly" detects that all the old files are gone, thus deletes all metadata and rescans everything.
@@ -443,7 +443,7 @@ I'm not sure whether only one or both of the next two steps fix this issue; in a
 
 Internally, Jellyfin identifies files, folders, ... by a unique 32 byte ID. Sounds like a good idea but the implementation is... well judge for yourself. 
 
-The ID is calculated as MD5 of the type of the object as well as its file path. So to maintain a proper database, the IDs must be recalculated and updated whereever they occur. Interesting to note here that the MD5 function used here encodes those strings in UTF-16-le first (because why not I guess...). 
+The ID is calculated as MD5 of the type of the object as well as its file path. So to maintain a proper database, the IDs must be recalculated and updated whereever they occur. Interesting to note here that the MD5 function encodes those strings in UTF-16-le first (because why not I guess...). 
 On top of that, the ID format is not consistent. Depending on the column of the database, it's either in binary form, string form or string form with dashes. However, there were many IDs left that did not match the Item IDs described so far. Only by comparing what _should_ belong together did I notice that sometimes Jellyfin swaps the byte ordering within the IDs. Boy was I banging my head onto the desk when discovering this...
 
 These different IDs of course occur in the database files. More annoyingly (though this kinda makes sense tbh), they also occur in the metadata file paths (among others). Meaning, the script not only checks and updates all the files but also their locations if an ID is detected in their file paths. Luckily, file paths seem to only use a single type of the various ID flavors presented above. Though at this point it wouldn't really matter anymore. 
