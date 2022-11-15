@@ -431,7 +431,7 @@ The migration is a multi step process that not only modifies but also reorganize
 
 ### Path adjustments
 
-Jellyfin mostly uses hardcoded, absolute paths. There are the `%MetadataPath%` and `%AppDataPath%` path variables, but even those paths use the operating systems slashes (meaning, `\` on Windows and `/` else). Jellyfin might find the files without adjusting the slashes, but I prefer to be safe here and many of them are updated for other reasons anyway ([see below](#item-ids)).
+Jellyfin mostly uses hardcoded, absolute paths. There are the `%MetadataPath%` and `%AppDataPath%` (no, the upper-/lowercase `data` is not a typo...) path variables, but even those paths use the operating systems slashes (meaning, `\` on Windows and `/` else). Jellyfin might find the files without adjusting the slashes, but I prefer to be safe here and many of them are updated for other reasons anyway ([see below](#item-ids)).
 Long story short, *every* file path is updated. 
 
 This is what my first version of the script did. Update all paths everywhere. This is also where publicly available documentation ended at the time of writing this script (may-october 2022). Any tutorial and tool available on the internet does this (and only this) step. 
