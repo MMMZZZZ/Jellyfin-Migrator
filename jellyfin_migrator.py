@@ -1250,18 +1250,20 @@ def update_file_dates():
             print_log("File doesn't seem to exist; can't update its dates in the database: ", target)
             continue
 
-        filestats = os.stat(target)
-
-        new_date_created  = get_datestr_from_python_time_ns(filestats.st_ctime_ns)
-        new_date_modified = get_datestr_from_python_time_ns(filestats.st_mtime_ns)
-
         date_created_ns  = jf_date_str_to_python_ns(date_created)
         date_modified_ns = jf_date_str_to_python_ns(date_modified)
 
+        if date_created_ns >= 0 and date_modified_ns >= 0:
+            continue
+
+        filestats = os.stat(target)
+
         if date_created_ns < 0:
+            new_date_created = get_datestr_from_python_time_ns(filestats.st_ctime_ns)
             cur.execute("UPDATE `TypedBaseItems` SET `DateCreated` = ? WHERE `rowid` = ?",
                         (new_date_created, rowid))
         if date_modified_ns < 0:
+            new_date_modified = get_datestr_from_python_time_ns(filestats.st_mtime_ns)
             cur.execute("UPDATE `TypedBaseItems` SET `DateModified` = ? WHERE `rowid` = ?",
                         (new_date_modified, rowid))
 
