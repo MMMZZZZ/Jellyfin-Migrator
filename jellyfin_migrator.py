@@ -19,15 +19,17 @@ import pathlib
 import sqlite3
 import json
 import hashlib
-import binascii
 import xml.etree.ElementTree as ET
 from pathlib import Path
 from shutil import copy
 from time import time
-from jellyfin_id_scanner import *
 import datetime
 from string import ascii_letters
 import os
+
+from jellyfin_id_scanner import (
+    bid2sid, sid2did, sid2bid, convert_ancestor_id
+)
 
 
 # TODO BEFORE YOU START:
@@ -1271,7 +1273,7 @@ def update_file_dates():
     print_log("Done.")
 
 
-if __name__ == "__main__":
+def main():
     print_log("")
     print_log("Starting Jellyfin Database Migration")
 
@@ -1324,3 +1326,6 @@ if __name__ == "__main__":
 
     print_log("")
     print_log("Jellyfin Database Migration complete.")
+
+if __name__ == "__main__":
+    main()

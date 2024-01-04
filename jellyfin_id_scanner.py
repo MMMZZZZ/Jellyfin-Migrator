@@ -196,7 +196,7 @@ def get_id_candidates(s):
     return column_type, result
 
 
-if __name__ == "__main__":
+def main():
     desc = """
     Jellyfin ID Scanner - Searches through database files for occurences of jellyfin IDs
     Copyright (C) 2022  Max Zuidberg
@@ -248,3 +248,6 @@ if __name__ == "__main__":
     results = [[x[i].ljust(lengths[i] + 1) for i in range(len(x))] for x in results]
     for x in results:
         print(*x)
+
+if __name__ == "__main__":
+    main()
