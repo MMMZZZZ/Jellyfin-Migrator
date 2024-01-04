@@ -91,7 +91,7 @@ path_replacements = {
     "C:/ProgramData/Jellyfin/Server/config": "/config",
     "C:/ProgramData/Jellyfin/Server/cache": "/config/cache",
     "C:/ProgramData/Jellyfin/Server/log": "/config/log",
-    "C:/ProgramData/Jellyfin/Server": "/config/data", # everything else: metadata, plugins, ...
+    "C:/ProgramData/Jellyfin/Server": "/config/data",  # everything else: metadata, plugins, ...
     "C:/ProgramData/Jellyfin/Server/transcodes": "/config/data/transcodes",
     "C:/Program Files/Jellyfin/Server/ffmpeg.exe": "usr/lib/jellyfin-ffmpeg/ffmpeg",
     "%MetadataPath%": "%MetadataPath%",
@@ -456,6 +456,8 @@ ids = dict()
 
 # Custom print function that prints to both the console as well as to a log file
 logging_newline = False
+
+
 def print_log(*args, **kwargs):
     global log_file, logging_newline
     print(*args, **kwargs)
@@ -497,7 +499,7 @@ def recursive_root_path_replacer(d, to_replace: dict):
     elif type(d) is str or isinstance(d, pathlib.PurePath):
         try:
             p = Path(d)
-        except:
+        except Exception:
             # This actually doesn't occur I think; Path() can pretty much convert any string into a Path
             # object (which is equivalent to saying it doesn't have any restrictions for filenames).
             ignored += 1
@@ -553,7 +555,7 @@ def recursive_id_path_replacer(d, to_replace: dict):
     elif type(d) is str or isinstance(d, pathlib.PurePath):
         try:
             p = Path(d)
-        except:
+        except Exception:
             # This actually doesn't occur I think; Path() can pretty much convert any string into a Path
             # object (which is equivalent to saying it doesn't have any restrictions for filenames).
             ignored += 1
@@ -876,7 +878,7 @@ def process_file(
         target: Path,
         replacements: dict,
         replace_func,
-        tables:dict = None,
+        tables: dict = None,
         copy_only: bool = False,
         no_log: bool = False,
 ) -> None:
@@ -1105,7 +1107,7 @@ def get_ids():
     id_replacements_str_dash          = {sid2did(k): sid2did(v) for k, v in id_replacements_str.items()}
     id_replacements_ancestor_str      = {convert_ancestor_id(k): convert_ancestor_id(v) for k, v in id_replacements_str.items()}
     id_replacements_ancestor_bin      = {sid2bid(k): sid2bid(v) for k, v in id_replacements_ancestor_str.items()}
-    id_replacements_ancestor_str_dash = {sid2did(k):sid2did(v) for k, v in id_replacements_ancestor_str.items()}
+    id_replacements_ancestor_str_dash = {sid2did(k): sid2did(v) for k, v in id_replacements_ancestor_str.items()}
 
     ids = {
         "bin": id_replacements_bin,
@@ -1198,7 +1200,7 @@ def get_datestr_from_python_time_ns(time_ns: int):
     return timestamp
 
 
-def delete_empty_folders(dir:str):
+def delete_empty_folders(dir: str):
     dir = Path(dir)
 
     done = False
@@ -1318,7 +1320,7 @@ def main():
         todo_list_ids,
         process_func=update_db_table_ids,
         replace_func=None,
-        path_replacements = path_replacements,
+        path_replacements=path_replacements,
     )
 
     # Finally, update the file dates in the db.

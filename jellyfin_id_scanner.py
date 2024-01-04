@@ -28,7 +28,7 @@ ids = dict()
 # convert_ancestor_id: regroup bytes to convert from/to ancestor id format (symetric)
 def convert_ancestor_id(id: str):
     # Group by bytes
-    id = [id[i : i+2] for i in range(0, len(id), 2)]
+    id = [id[i : i + 2] for i in range(0, len(id), 2)]
 
     # Reorder (not sure why it's done like this but it is)
     # and convert back to string.
@@ -37,12 +37,21 @@ def convert_ancestor_id(id: str):
     swapped_id = [id[i] for i in byte_order]
     swapped_id.extend(id[8:])
     return "".join(swapped_id)
+
+
 # bid2sid: binary id to string id
-def bid2sid(id): return binascii.b2a_hex(id).decode("ascii")
+def bid2sid(id):
+    return binascii.b2a_hex(id).decode("ascii")
+
+
 # sid2bid: string id to binary id
-def sid2bid(id): return binascii.a2b_hex(id)
+def sid2bid(id):
+    return binascii.a2b_hex(id)
+
+
 # sid2did: string id to dashed string id
-def sid2did(id): return "-".join([id[:8], id[8:12], id[12:16], id[16:20], id[20:]])
+def sid2did(id):
+    return "-".join([id[:8], id[8:12], id[12:16], id[16:20], id[20:]])
 
 
 # Loads all IDs from jellyfins library.db file.
@@ -59,7 +68,7 @@ def sid2did(id): return "-".join([id[:8], id[8:12], id[12:16], id[16:20], id[20:
 #     * ancestor string with dashes: 'dedd3a83-2899-e993-3d05-72907f8b4cad'
 #   * in paths they're grouped in folders by the first two letters:
 #     '.../83/833addde992893e93d0572907f8b4cad/...'
-def load_ids(library_db:str):
+def load_ids(library_db: str):
     con = sqlite3.connect(library_db)
     cur = con.cursor()
     id_replacements_bin = [x[0] for x in cur.execute("SELECT `guid` FROM `TypedBaseItems`")]
@@ -242,7 +251,7 @@ def main():
 
     # Remove empty results, sort them for convenience, and format them for pretty printing.
     results = [[x[0], x[1], ", ".join(x[2])] for x in results if x]
-    results.sort(key=lambda x:"".join(x))
+    results.sort(key=lambda x: "".join(x))
     results = [["Table", "Column", "ID Type(s) found"]] + results
     lengths = [max([len(x) for x in col]) for col in zip(*results)]
     results = [[x[i].ljust(lengths[i] + 1) for i in range(len(x))] for x in results]
