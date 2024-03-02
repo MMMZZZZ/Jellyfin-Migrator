@@ -62,12 +62,12 @@ log_file = "~/jf-migrator.log"
 # changed.
 path_replacements = {
     # Self-explanatory, I guess. "\\" if migrating *to* Windows, "/" else.
-    "target_path_slash": "/",
+    #"target_path_slash": "/",
     # Paths to your libraries
-    "D:/Serien": "/data/tvshows",
-    "F:/Serien": "/data/tvshows",
-    "F:/Filme": "/data/movies",
-    "F:/Musik": "/data/music",
+    #"D:/Serien": "/data/tvshows",
+    #"F:/Serien": "/data/tvshows",
+    #"F:/Filme": "/data/movies",
+    #"F:/Musik": "/data/music",
     # Paths to the different parts of the jellyfin database. Determine these
     # by comparing your existing installation with the paths in your new
     # installation.
@@ -108,9 +108,9 @@ fs_path_replacements = {
     "/config": "/",
     "%AppDataPath%": "/data/data",
     "%MetadataPath%": "/data/metadata",
-    "/data/tvshows": "Y:/Serien",
-    "/data/movies": "Y:/Filme",
-    "/data/music": "Y:/Musik",
+    #"/data/tvshows": "Y:/Serien",
+    #"/data/movies": "Y:/Filme",
+    #"/data/music": "Y:/Musik",
 }
 
 
@@ -121,9 +121,9 @@ fs_path_replacements = {
 # and then do the replacement according to the path_replacements dict.
 # This is required if you copied your jellyfin DB to another location and then
 # start processing it with this script.
-original_root = Path("C:/ProgramData/Jellyfin/Server")
-source_root = Path("D:/Jellyfin/Server")
-target_root = Path("D:/Jellyfin-dummy")
+original_root = Path("/var/lib/jellyfin")
+source_root = Path("/var/lib/jellyfin")
+target_root = Path("/docker/jellyfin-prod")
 
 
 ### The To-Do Lists: todo_list_paths, todo_list_id_paths and todo_list_ids.
